@@ -1205,7 +1205,8 @@
         document.body.style.backgroundImage = 'url(' + asset('background/background1.jpg') + ')';
       }
     }
-    document.addEventListener('DOMContentLoaded', applyAssetBase);
+    applyAssetBase(); // 立即执行（脚本在 DOM 之后）
+    document.addEventListener('DOMContentLoaded', applyAssetBase); // 保险
 
     // ==================== 头像预设 ====================
     const AVATARS = [
