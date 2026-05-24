@@ -1,0 +1,3542 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>手指对战</title>
+  <style>
+    /* 原有样式保持不变 */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Microsoft YaHei', sans-serif;
+      position: relative;
+      color: #eee; display: flex; justify-content: center; align-items: center;
+      min-height: 100vh; flex-direction: column;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: url('background/background1.jpg') no-repeat center center;
+      background-size: cover;
+      filter: blur(8px);
+      z-index: -1;
+    }
+    #app { width: 100%; max-width: 620px; padding: 8px 20px 20px 20px; position: relative; }
+    .room-info { text-align: center; margin-bottom: 4px; color: #aaa; font-size: 14px; }
+    .battle-area { display: flex; flex-direction: column; align-items: center; margin-bottom: 10px; }
+    .player-area { width: 100%; display: flex; flex-direction: column; align-items: center; }
+    .player-name { font-size: 20px; margin-bottom: 6px; text-shadow: 0 0 10px rgba(255,255,255,0.3); display: flex; align-items: center; gap: 8px; }
+    .player-stats { font-size: 14px; margin-bottom: 12px; }
+    .hands { display: flex; gap: 30px; }
+
+    .avatar-img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.3); }
+
+    .hand-card {
+      width: 110px; height: 140px;
+      background: radial-gradient(circle at 20% 20%, #3a3a5c, #1f1f2e);
+      border-radius: 24px;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.5), inset 0 1px 2px rgba(255,255,255,0.08);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 3px solid rgba(255,255,255,0.2);
+      position: relative;
+      user-select: none;
+      overflow: hidden;
+    }
+    .hand-card img {
+      width: 90%;
+      height: auto;
+      max-height: 100%;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+    }
+    .hand-card.opponent img { transform: rotate(180deg); }
+    .hand-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.6); }
+    .hand-card:active { transform: scale(0.96); }
+    .hand-card.cut { opacity: 0.25; cursor: not-allowed; filter: grayscale(100%); background: #1a1a1a; }
+    .hand-card.own.cut.can-pay {
+      opacity: 0.7; cursor: pointer; filter: brightness(0.6);
+      background: radial-gradient(circle at 30% 30%, #6b0000, #2a0000);
+      border-color: #8b0000;
+      box-shadow: 0 0 12px rgba(180,0,0,0.4), 0 8px 18px rgba(0,0,0,0.5);
+      animation: bloodPulse 0.8s ease-in-out infinite;
+    }
+    .hand-card.own.cut.can-pay::after {
+      content: '🩸 点击恢复';
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      color: #ff6666;
+      text-shadow: 0 0 6px rgba(255,0,0,0.8);
+      white-space: nowrap;
+      pointer-events: none;
+      animation: hintFade 1.2s ease-in-out infinite;
+      z-index: 2;
+    }
+    @keyframes hintFade {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+    .hand-card.own.cut.can-pay:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 0 20px rgba(200,0,0,0.6), 0 12px 24px rgba(0,0,0,0.6);
+      border-color: #aa2222;
+    }
+    @keyframes bloodPulse {
+      0%, 100% { box-shadow: 0 0 12px rgba(180,0,0,0.4), 0 8px 18px rgba(0,0,0,0.5); }
+      50% { box-shadow: 0 0 22px rgba(200,0,0,0.6), 0 8px 18px rgba(0,0,0,0.5); }
+    }
+    .hand-card.locked { opacity: 0.55; cursor: default; background: #3a3a4a; border-color: #ffaa00; }
+    .hand-card.selected { border-color: #ffd700; transform: scale(1.08); box-shadow: 0 0 20px #ffd70066; }
+    .hand-card.targeted { border-color: #ff4444; transform: scale(1.08); box-shadow: 0 0 20px #ff444466; }
+    .hand-card.opponent, .hand-card.opponent img { -webkit-user-drag: none; user-select: none; }
+    .hand-card.opponent:hover:not(.cut):not(.locked) { border-color: #ff6666; }
+    .hand-card.own:hover:not(.cut):not(.locked) { border-color: #66aaff; }
+    .hand-card.own:active { cursor: grabbing; }
+    .hand-card.opponent.drag-over { border-color: #00ff88; box-shadow: 0 0 15px #00ff8888; }
+
+    .controls { text-align: center; margin: 20px 0; }
+    .controls button, .controls select { margin: 5px; padding: 10px 15px; font-size: 16px; border-radius: 8px; border: none; background: #4b4b6d; color: white; cursor: pointer; }
+    .controls button:hover { background: #5c5c82; }
+    .controls button:disabled { background: #333; color: #666; cursor: not-allowed; }
+    #statusMessage { text-align: center; color: #ffcc00; min-height: 24px; }
+    .peace-banner { background: #ffaa00; color: black; text-align: center; padding: 5px; border-radius: 5px; margin: 10px 0; }
+
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7); z-index: 100;
+      display: flex; justify-content: center; align-items: center;
+    }
+    .skill-panel { background: #222; border-radius: 12px; padding: 20px; min-width: 260px; text-align: center; }
+    .skill-panel button { display: block; width: 100%; margin: 8px 0; }
+    .hidden { display: none !important; }
+    .pay-btn { background: #e94560; }
+    .avatar-select { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 15px 0; }
+    .avatar-option { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; cursor: pointer; border: 3px solid transparent; transition: all 0.2s; }
+    .avatar-option:hover { border-color: #66aaff; }
+    .avatar-option.selected { border-color: #ffd700; box-shadow: 0 0 12px #ffd70066; }
+    .nickname-input { padding: 10px; border-radius: 8px; border: 2px solid #4b4b6d; background: #1a1a2e; color: #eee; font-size: 16px; width: 100%; max-width: 200px; text-align: center; margin: 10px 0; }
+
+    .skill-hint { background: #ffd700; color: #222; text-align: center; padding: 6px 10px; border-radius: 6px; margin: 10px 0; font-weight: bold; display: flex; justify-content: center; align-items: center; gap: 12px; box-shadow: 0 0 14px #ffd70077; }
+    .hint-cancel-btn { background: #444; color: #fff; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .hint-cancel-btn:hover { background: #666; }
+    .hand-card.skill-target { cursor: pointer; border-color: #ffd700; animation: pulseTarget 1s ease-in-out infinite; }
+    @keyframes pulseTarget {
+      0%, 100% { box-shadow: 0 0 14px #ffd700aa, inset 0 1px 2px rgba(255,255,255,0.08); transform: scale(1); }
+      50% { box-shadow: 0 0 26px #ffd700ff, inset 0 1px 2px rgba(255,255,255,0.08); transform: scale(1.04); }
+    }
+
+    /* 大技能选择面板：屏幕中间左右两个大卡片 */
+    .big-skill-panel { background: rgba(20,20,35,0.95); border: 2px solid rgba(255,215,0,0.3); border-radius: 18px; padding: 28px; text-align: center; min-width: 340px; max-width: 560px; }
+    .big-skill-panel h3 { margin-bottom: 18px; font-size: 22px; color: #ffd700; }
+    .skill-choice-row { display: flex; gap: 24px; justify-content: center; margin: 14px 0 18px; }
+    .skill-choice-row button {
+      flex: 1; min-width: 150px; min-height: 130px;
+      font-size: 22px; font-weight: bold;
+      padding: 18px 14px;
+      background: linear-gradient(135deg, #4b4b6d 0%, #6a5acd 100%);
+      border: 3px solid rgba(255,255,255,0.2);
+      border-radius: 14px;
+      color: #fff; cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+    }
+    .skill-choice-row button:hover {
+      transform: translateY(-4px);
+      border-color: #ffd700;
+      box-shadow: 0 10px 26px rgba(255,215,0,0.45);
+    }
+    .skill-choice-row button:active { transform: scale(0.96); }
+    #skipSkill { margin-top: 6px; background: #555; color: #ddd; padding: 8px 18px; border: none; border-radius: 8px; cursor: pointer; }
+    #skipSkill:hover { background: #777; }
+
+    /* 技能发动提示（头像左侧） */
+    .cast-notice {
+      position: fixed;
+      transform: translate(-100%, -50%);
+      background: linear-gradient(135deg, #ff8c00, #ffd700);
+      color: #222; padding: 8px 16px;
+      border-radius: 10px;
+      font-size: 15px; font-weight: bold;
+      box-shadow: 0 0 30px rgba(255,215,0,0.6);
+      z-index: 200; pointer-events: none;
+      white-space: nowrap;
+      animation: castPop 0.35s ease-out;
+    }
+    @keyframes castPop {
+      0% { opacity: 0; transform: translate(-100%, -50%) scale(0.6); }
+      60% { opacity: 1; transform: translate(-100%, -50%) scale(1.08); }
+      100% { opacity: 1; transform: translate(-100%, -50%) scale(1); }
+    }
+
+    .action-notice {
+      position: fixed;
+      top: 50%; right: 16px;
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.95);
+      color: #111; padding: 10px 18px;
+      border-radius: 10px;
+      font-size: 20px; font-weight: 900;
+      border: 2px solid #333;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      z-index: 250; pointer-events: none;
+      white-space: nowrap;
+    }
+    .action-notice.show {
+      animation: actionPop 0.35s ease-out;
+    }
+    @keyframes actionPop {
+      0% { opacity: 0; transform: translateY(-50%) translateX(20px) scale(0.8); }
+      100% { opacity: 1; transform: translateY(-50%) translateX(0) scale(1); }
+    }
+
+    /* 受击震动 */
+    .big-avatar.shaking {
+      animation: avatarShake 0.45s ease-out;
+    }
+    @keyframes avatarShake {
+      0%   { transform: translateX(0); }
+      8%   { transform: translateX(-8px) rotate(-3deg); }
+      16%  { transform: translateX(7px) rotate(2deg); }
+      24%  { transform: translateX(-6px) rotate(-1.5deg); }
+      32%  { transform: translateX(5px) rotate(1deg); }
+      40%  { transform: translateX(-3px) rotate(-0.5deg); }
+      50%  { transform: translateX(2px); }
+      60%  { transform: translateX(-1px); }
+      100% { transform: translateX(0) rotate(0); }
+    }
+    /* 治愈辉光 */
+    .big-avatar.heal-glow {
+      animation: healGlow 0.8s ease-out;
+    }
+    @keyframes healGlow {
+      0%   { filter: drop-shadow(0 0 12px #00ff88) brightness(1.4); }
+      100% { filter: drop-shadow(0 0 0px #00ff88) brightness(1); }
+    }
+    /* 护盾能量（头像光晕） */
+    .big-avatar.shield-up {
+      animation: shieldUp 0.6s ease-out;
+    }
+    @keyframes shieldUp {
+      0%   { filter: drop-shadow(0 0 20px #66ccff) brightness(1.5); transform: scale(1.1); }
+      100% { filter: drop-shadow(0 0 0px #66ccff) brightness(1); transform: scale(1); }
+    }
+    /* 护盾展开大动画 */
+    .shield-fx {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      width: 120px; height: 120px;
+      pointer-events: none; z-index: 6;
+      opacity: 0;
+      filter: drop-shadow(0 0 18px rgba(100,180,255,0.7));
+    }
+    .shield-fx img {
+      width: 100%; height: 100%; object-fit: contain;
+    }
+    .shield-fx.deploy {
+      animation: shieldDeploy 2s ease-out forwards;
+    }
+    @keyframes shieldDeploy {
+      0%   { opacity: 0; transform: translate(-50%, -50%) scale(0) rotate(0deg); }
+      15%  { opacity: 1; transform: translate(-50%, -50%) scale(1.15) rotate(60deg); }
+      25%  { opacity: 1; transform: translate(-50%, -50%) scale(0.95) rotate(100deg); }
+      35%  { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(120deg); }
+      55%  { opacity: 0.9; transform: translate(-50%, -50%) scale(1.02) rotate(200deg); }
+      75%  { opacity: 0.7; transform: translate(-50%, -50%) scale(1) rotate(280deg); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(1.1) rotate(360deg); }
+    }
+    /* 仙人模式 */
+    .big-avatar.sage-aura {
+      animation: sageAura 1.2s ease-out;
+    }
+    @keyframes sageAura {
+      0%   { filter: drop-shadow(0 0 30px #ff8c00) brightness(1.6) saturate(2); }
+      50%  { filter: drop-shadow(0 0 18px #ff8c00) brightness(1.3) saturate(1.5); }
+      100% { filter: drop-shadow(0 0 0px #ff8c00) brightness(1) saturate(1); }
+    }
+    /* 复活金光 */
+    .big-avatar.revive-glow {
+      animation: reviveGlow 1s ease-out;
+    }
+    @keyframes reviveGlow {
+      0%   { filter: drop-shadow(0 0 40px #ffd700) brightness(2); transform: scale(1.15); }
+      50%  { filter: drop-shadow(0 0 20px #ffd700) brightness(1.4); transform: scale(1.05); }
+      100% { filter: drop-shadow(0 0 0px #ffd700) brightness(1); transform: scale(1); }
+    }
+
+    /* 挥砍线 */
+    #fxSlash {
+      position: fixed; z-index: 350; pointer-events: none;
+      top: 0; left: 0; width: 100%; height: 100%;
+      opacity: 0;
+    }
+    #fxSlash.active { animation: slashFx 0.5s ease-out forwards; }
+    @keyframes slashFx {
+      0%   { opacity: 0; }
+      15%  { opacity: 1; }
+      30%  { opacity: 0.9; }
+      100% { opacity: 0; }
+    }
+    #fxSlash svg { width: 100%; height: 100%; }
+
+    /* 屏幕闪白（爆炸） */
+    #fxScreenFlash {
+      position: fixed; z-index: 340; pointer-events: none;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: white; opacity: 0;
+    }
+    #fxScreenFlash.active { animation: screenFlash 0.5s ease-out forwards; }
+    @keyframes screenFlash {
+      0%   { opacity: 0.6; }
+      100% { opacity: 0; }
+    }
+
+    /* 屏幕震荡 */
+    #app.screen-shake {
+      animation: screenShake 0.5s ease-out;
+    }
+    @keyframes screenShake {
+      0%   { transform: translateX(0); }
+      5%   { transform: translateX(-6px); }
+      10%  { transform: translateX(5px); }
+      15%  { transform: translateX(-4px); }
+      20%  { transform: translateX(3px); }
+      30%  { transform: translateX(-1px); }
+      100% { transform: translateX(0); }
+    }
+
+    /* 封印锁 */
+    .big-avatar.seal-lock {
+      animation: sealLock 0.7s ease-out;
+    }
+    @keyframes sealLock {
+      0%   { filter: brightness(0.3) sepia(1) hue-rotate(-30deg); transform: scale(0.9); }
+      30%  { filter: brightness(0.3) sepia(1) hue-rotate(-30deg); transform: scale(0.9); }
+      100% { filter: none; transform: scale(1); }
+    }
+
+    /* 绯红之王时间删除 */
+    #fxKingCrimson {
+      position: fixed; z-index: 380; pointer-events: none;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(180, 0, 0, 0.7);
+      opacity: 0;
+    }
+    #fxKingCrimson.active { animation: kingCrimsonFx 1.5s ease-out forwards; }
+    @keyframes kingCrimsonFx {
+      0%   { opacity: 0; }
+      5%   { opacity: 0.85; filter: brightness(0.4) contrast(1.5); }
+      12%  { opacity: 0.75; filter: brightness(0.3) contrast(2) saturate(0.3); }
+      20%  { opacity: 0.9; filter: brightness(0.2) contrast(2.5) hue-rotate(20deg); }
+      35%  { opacity: 0.5; filter: brightness(0.5) contrast(1.3); }
+      60%  { opacity: 0.2; filter: brightness(0.8) contrast(1.1); }
+      100% { opacity: 0; filter: none; }
+    }
+    /* 绯红之王时删时的全屏负片闪 */
+    #fxKCNegative {
+      position: fixed; z-index: 379; pointer-events: none;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255, 80, 80, 0.3);
+      mix-blend-mode: difference;
+      opacity: 0;
+    }
+    #fxKCNegative.active { animation: kcNegative 0.6s ease-out forwards; }
+    @keyframes kcNegative {
+      0%   { opacity: 0.8; }
+      100% { opacity: 0; }
+    }
+
+    /* 和平白光 */
+      position: fixed; z-index: 340; pointer-events: none;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 70%);
+      opacity: 0;
+    }
+    #fxPeace.active { animation: peaceFx 1.5s ease-out forwards; }
+    @keyframes peaceFx {
+      0%   { opacity: 0; }
+      20%  { opacity: 1; }
+      60%  { opacity: 0.8; }
+      100% { opacity: 0; }
+    }
+
+    /* 水滴（饮甘露） */
+    .water-drop {
+      position: fixed; z-index: 370; pointer-events: none;
+      width: 22px; height: 32px;
+      background: radial-gradient(ellipse at 40% 30%, rgba(180,230,255,0.9), rgba(30,144,255,0.7));
+      border-radius: 80% 0 55% 50% / 55% 0 80% 50%;
+      opacity: 0;
+      filter: drop-shadow(0 0 8px rgba(100,180,255,0.8));
+    }
+    /* 水滴溅开 */
+    .water-splash {
+      position: fixed; z-index: 369; pointer-events: none;
+      width: 8px; height: 8px;
+      background: rgba(100,200,255,0.8);
+      border-radius: 50%;
+      opacity: 0;
+    }
+    .water-splash.burst {
+      animation: splashBurst 0.5s ease-out forwards;
+    }
+    @keyframes splashBurst {
+      0%   { opacity: 0.9; transform: translate(0, 0) scale(1); }
+      100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0); }
+    }
+
+    /* 特殊技大字 */
+    #fxBigText {
+      position: fixed; z-index: 360; pointer-events: none;
+      top: 42%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 48px; font-weight: bold; white-space: nowrap;
+      text-shadow: 0 0 30px currentColor;
+      opacity: 0;
+    }
+    #fxBigText.active { animation: bigTextPop 1.2s ease-out forwards; }
+    @keyframes bigTextPop {
+      0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+      15%  { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+      25%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      70%  { opacity: 0.7; transform: translate(-50%, -50%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(1.3); }
+    }
+
+    /* 箭头 */
+    #fxBow {
+      position: fixed; z-index: 360; pointer-events: none;
+      font-size: 64px; opacity: 0;
+      transform: translate(-50%, -50%);
+    }
+    #fxBow.draw { animation: bowDraw 0.5s ease-out forwards; }
+    @keyframes bowDraw {
+      0%   { opacity: 0; transform: translate(-50%, -50%) rotate(-20deg) scale(0.5); }
+      35%  { opacity: 1; transform: translate(-50%, -50%) rotate(-50deg) scale(1.25); }
+      100% { opacity: 1; transform: translate(-50%, -50%) rotate(-45deg) scale(1); }
+    }
+    .volley-arrow {
+      position: fixed; z-index: 370; pointer-events: none;
+      font-size: 36px; opacity: 0;
+      transform: translate(-50%, -50%);
+    }
+    .volley-arrow.stuck { animation: arrowStuck 0.8s ease-in forwards; }
+    @keyframes arrowStuck {
+      0%   { opacity: 1; transform: translate(-50%, -50%) rotate(0deg); }
+      8%   { transform: translate(-50%, -50%) rotate(-8deg); }
+      25%  { transform: translate(-50%, -50%) rotate(4deg); }
+      45%  { opacity: 1; transform: translate(-50%, -50%) rotate(0deg); }
+      70%  { opacity: 0.6; transform: translate(-50%, -40%); }
+      100% { opacity: 0; transform: translate(-50%, 20px) rotate(20deg); }
+    }
+
+    #fxPunch {
+      position: fixed; z-index: 370; pointer-events: none;
+      font-size: 80px; opacity: 0;
+      transform: translate(-50%, -50%);
+    }
+    #fxPunch.smash { animation: punchSmash 0.5s ease-out forwards; }
+    @keyframes punchSmash {
+      0%   { opacity: 1; transform: translate(-50%, -50%) scale(2.5) translateX(-60px); }
+      30%  { opacity: 1; transform: translate(-50%, -50%) scale(0.85) translateX(5px); }
+      50%  { opacity: 1; transform: translate(-50%, -50%) scale(1.05) translateX(-3px); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(0.4) translateX(30px); }
+    }
+
+    #fxSlap {
+      position: fixed; z-index: 370; pointer-events: none;
+      font-size: 80px; opacity: 0;
+      transform: translate(-50%, -50%) scaleX(-1);
+    }
+    #fxSlap.smash { animation: slapSmash 0.5s ease-out forwards; }
+    @keyframes slapSmash {
+      0%   { opacity: 1; transform: translate(-50%, -50%) scaleX(-1) scale(2.2) translateX(50px); }
+      25%  { opacity: 1; transform: translate(-50%, -50%) scaleX(-1) scale(0.9) translateX(-8px); }
+      45%  { opacity: 1; transform: translate(-50%, -50%) scaleX(-1) scale(1.05) translateX(3px); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scaleX(-1) scale(0.4) translateX(-40px); }
+    }
+
+    #fxClock {
+      position: fixed; z-index: 380; pointer-events: none;
+      width: 64px; height: 64px;
+      border: 3px solid rgba(255, 215, 0, 0.85);
+      border-radius: 50%;
+      box-shadow: 0 0 18px rgba(255, 215, 0, 0.5), inset 0 0 10px rgba(255, 215, 0, 0.15);
+      opacity: 0;
+      transform: translate(-50%, -50%);
+    }
+    #fxClock::after {
+      content: '';
+      position: absolute;
+      bottom: 50%; left: 50%;
+      width: 2.5px; height: 42%;
+      background: linear-gradient(to top, #ffd700, #fff8dc);
+      transform-origin: bottom center;
+      transform: translateX(-50%);
+      border-radius: 1px;
+    }
+    #fxClock.tick {
+      animation: clockAppear 2s ease-out forwards;
+    }
+    #fxClock.tick::after {
+      animation: clockHandRotate 2s linear forwards;
+    }
+    @keyframes clockAppear {
+      0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+      10%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      85%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
+    }
+    @keyframes clockHandRotate {
+      0%   { transform: translateX(-50%) rotate(0deg); }
+      100% { transform: translateX(-50%) rotate(360deg); }
+    }
+
+    @keyframes heartFloat {
+      0%   { opacity: 0; transform: translateY(0) translateX(0) scale(0.4) rotate(0deg); }
+      15%  { opacity: 1; transform: translateY(-15vh) translateX(8px) scale(1.1) rotate(5deg); }
+      40%  { opacity: 1; transform: translateY(-45vh) translateX(-12px) scale(0.9) rotate(-8deg); }
+      70%  { opacity: 0.7; transform: translateY(-75vh) translateX(6px) scale(0.7) rotate(3deg); }
+      100% { opacity: 0; transform: translateY(-105vh) translateX(-3px) scale(0.3) rotate(-5deg); }
+    }
+
+    #fxGrenade {
+      position: fixed; z-index: 375; pointer-events: none;
+      width: 48px; height: 48px;
+      object-fit: contain;
+      opacity: 0;
+      transform: translate(-50%, -50%);
+    }
+    #fxExplosion {
+      position: fixed; z-index: 380; pointer-events: none;
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #fff 0%, #ffaa00 15%, #ff4400 40%, #cc0000 70%, transparent 100%);
+      opacity: 0;
+      transform: translate(-50%, -50%);
+    }
+    #fxExplosion.boom {
+      animation: explosionBoom 0.7s ease-out forwards;
+    }
+    @keyframes explosionBoom {
+      0%   { opacity: 1; transform: translate(-50%, -50%) scale(0.2); }
+      30%  { opacity: 1; transform: translate(-50%, -50%) scale(1.5); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(2.5); }
+    }
+
+    #fxDualGunL, #fxDualGunR {
+      position: fixed; z-index: 305; pointer-events: none;
+      font-size: 36px; opacity: 0;
+      transform: translate(-50%, -50%);
+    }
+    #fxDualGunL.recoil { animation: dualRecoil 0.08s ease-out; }
+    #fxDualGunR.recoil { animation: dualRecoil 0.08s ease-out; }
+    @keyframes dualRecoil {
+      0% { transform: translate(-50%, -50%) translateX(0); }
+      50% { transform: translate(-50%, -50%) translateX(-8px) rotate(-5deg); }
+      100% { transform: translate(-50%, -50%) translateX(0) rotate(0deg); }
+    }
+
+    /* 仙人模式吸收自然能量波纹 */
+    .avatar-wrap {
+      position: relative; display: inline-block;
+    }
+    .avatar-wrap.sage-ripple::before,
+    .avatar-wrap.sage-ripple::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 3px dashed rgba(0, 255, 136, 0.7);
+      pointer-events: none;
+      z-index: 5;
+      animation: rippleIn 1.5s ease-out infinite, rippleSpin 3s linear infinite;
+    }
+    .avatar-wrap.sage-ripple::after {
+      animation-delay: 0.75s, 0s;
+    }
+    @keyframes rippleIn {
+      0%   { width: 120px; height: 120px; opacity: 0.8; border-width: 3px; }
+      100% { width: 50px; height: 50px; opacity: 0; border-width: 1px; }
+    }
+    @keyframes rippleSpin {
+      0%   { transform: translate(-50%, -50%) rotate(0deg); }
+      100% { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    /* 22 加智力：手图飞出 + 双激光 */
+    .intel-hand-fly {
+      position: fixed; z-index: 370; pointer-events: none;
+      width: 90px; height: auto;
+      filter: drop-shadow(0 0 14px rgba(0,170,255,0.8));
+      transition: all 0.5s ease-out;
+    }
+    #fxLaserL, #fxLaserR {
+      position: fixed; z-index: 365; pointer-events: none;
+      height: 4px;
+      background: linear-gradient(90deg, rgba(0,200,255,1), rgba(0,170,255,0.9), rgba(150,230,255,0.4));
+      border-radius: 2px;
+      box-shadow: 0 0 14px rgba(0,170,255,0.9);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    #fxLaserL.on, #fxLaserR.on { opacity: 1; }
+
+    /* 仙人模式鸣人（头像右侧弹出） */
+    #fxNaruto {
+      position: fixed; z-index: 400; pointer-events: none;
+      width: 180px; height: auto; opacity: 0;
+      filter: drop-shadow(0 0 40px #ff8c00);
+      transform: translateY(-50%) scale(0.3);
+    }
+    #fxNaruto.show {
+      animation: narutoAppear 1.8s ease-out forwards;
+    }
+    @keyframes narutoAppear {
+      0%   { opacity: 0; transform: translateY(-50%) scale(0.3); }
+      12%  { opacity: 1; transform: translateY(-50%) scale(1.1); }
+      22%  { opacity: 1; transform: translateY(-50%) scale(1); }
+      65%  { opacity: 0.9; transform: translateY(-50%) scale(1); }
+      100% { opacity: 0; transform: translateY(-50%) scale(1.2); }
+    }
+
+    /* 护盾剩余回合数子标记 */
+    .shield-turns { font-size: 13px; color: #66ccff; margin-left: 6px; }
+
+    /* 大头像 + 右侧血/盾 面板 */
+    .player-header {
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 14px; padding: 0 6px;
+    }
+    .big-avatar {
+      width: 84px; height: 84px;
+      border-radius: 50%; object-fit: cover;
+      border: 3px solid rgba(255,255,255,0.4);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.55);
+      flex-shrink: 0;
+    }
+    .player-side-info {
+      display: flex; flex-direction: column; gap: 4px;
+      align-items: flex-start; min-width: 0; flex: 1;
+    }
+    .player-side-info .player-name {
+      font-size: 18px; margin-bottom: 2px;
+      text-shadow: 0 0 10px rgba(255,255,255,0.3);
+    }
+    .hp-row, .shield-row {
+      display: flex; flex-wrap: wrap;
+      gap: 2px; min-height: 30px; align-items: center;
+    }
+
+    /* 爱心 */
+    .heart {
+      display: inline-block; font-size: 24px;
+      color: #ff4d6d;
+      text-shadow: 0 0 8px #ff4d6dcc, 0 0 2px #fff;
+      transform: scale(0);
+      transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+      line-height: 1;
+    }
+    .heart.grown { transform: scale(1); }
+    .heart.slashing {
+      animation: slashHeart 0.6s ease-out forwards;
+    }
+    @keyframes slashHeart {
+      0%   { transform: scale(1) rotate(0deg); filter: brightness(1); }
+      25%  { transform: scale(1.3) rotate(-12deg); filter: brightness(2.5) drop-shadow(0 0 10px #fff); }
+      55%  { transform: scale(0.95) rotate(18deg); filter: brightness(0.6); }
+      100% { transform: scale(0) rotate(45deg); opacity: 0; filter: brightness(0.4); }
+    }
+    /* 划痕线 */
+    .heart.slashing::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: -15%;
+      width: 130%; height: 3px;
+      background: linear-gradient(90deg, transparent, #fff 30%, #ff3030 50%, #fff 70%, transparent);
+      transform: translateY(-50%) rotate(-28deg) scaleX(0);
+      transform-origin: left center;
+      filter: drop-shadow(0 0 6px #ff0000);
+      animation: slashLine 0.45s ease-out forwards;
+    }
+    @keyframes slashLine {
+      0%   { transform: translateY(-50%) rotate(-28deg) scaleX(0); opacity: 1; }
+      40%  { transform: translateY(-50%) rotate(-28deg) scaleX(1); opacity: 1; }
+      100% { transform: translateY(-50%) rotate(-28deg) scaleX(1); opacity: 0; }
+    }
+
+    /* 护盾图标 */
+    .shield-icon {
+      font-size: 20px;
+      display: inline-block;
+      filter: drop-shadow(0 0 6px #66ccff88);
+    }
+
+    /* 我方信息面板（发动按钮下方） */
+    .my-info-panel {
+      margin-top: 18px;
+      padding: 14px 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+    }
+    .my-info-panel .player-header { margin-bottom: 8px; }
+    .extra-stats {
+      font-size: 13px; color: #aaa;
+      margin-top: 8px; display: flex; gap: 16px;
+      flex-wrap: wrap; padding: 0 6px;
+    }
+
+    /* ===== 射击特效 (single_8) ===== */
+    .crosshair {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 60px; height: 60px; z-index: 10; pointer-events: none;
+      opacity: 0;
+    }
+    .crosshair::before, .crosshair::after {
+      content: '';
+      position: absolute; background: #ff0000;
+      box-shadow: 0 0 6px #ff0000;
+    }
+    .crosshair::before {
+      top: 0; left: 50%; transform: translateX(-50%);
+      width: 2px; height: 100%;
+    }
+    .crosshair::after {
+      left: 0; top: 50%; transform: translateY(-50%);
+      width: 100%; height: 2px;
+    }
+    .crosshair.active { animation: crossAppear 0.5s ease-out forwards; }
+    @keyframes crossAppear {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+      70% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+      100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
+
+    #gunEffect {
+      position: fixed; z-index: 300; pointer-events: none;
+      font-size: 56px; opacity: 0;
+      transform: translate(-50%, -50%) rotate(-20deg);
+    }
+    #gunEffect.show {
+      animation: gunShow 0.3s ease-out forwards;
+    }
+    #gunEffect.kick {
+      animation: gunRecoil 0.12s ease-out;
+    }
+    @keyframes gunShow {
+      0% { opacity: 0; transform: translate(-50%, -50%) rotate(-20deg) scale(0.3); }
+      100% { opacity: 1; transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+    }
+    @keyframes gunRecoil {
+      0% { transform: translate(-50%, -50%) rotate(0deg); }
+      50% { transform: translate(-55%, -50%) rotate(-5deg); }
+      100% { transform: translate(-50%, -50%) rotate(0deg); }
+    }
+
+    #bulletFx {
+      position: fixed; z-index: 310; pointer-events: none;
+      width: 10px; height: 10px;
+      background: #ffcc00;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #ff8800, 0 0 16px #ff4400;
+      opacity: 0;
+      transform: translate(-50%, -50%);
+    }
+
+    .muzzle-flash {
+      position: fixed; z-index: 301; pointer-events: none;
+      width: 50px; height: 50px;
+      background: radial-gradient(circle, #ffff00 0%, #ff8800 40%, transparent 70%);
+      border-radius: 50%;
+      opacity: 0;
+      transform: translate(-50%, -50%);
+    }
+    .muzzle-flash.fire {
+      animation: flashBoom 0.15s ease-out forwards;
+    }
+    @keyframes flashBoom {
+      0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(2.5); }
+    }
+
+    .big-avatar.charred {
+      animation: charBurn 0.5s ease-in forwards;
+    }
+    @keyframes charBurn {
+      0% { filter: none; }
+      60% { filter: brightness(0.15) saturate(0) contrast(2) sepia(0.8); }
+      100% { filter: brightness(0.3) saturate(0.2) contrast(1.3) sepia(0.4); }
+    }
+    .big-avatar.charred.recover {
+      animation: charRecover 1s ease-out forwards;
+    }
+    @keyframes charRecover {
+      0% { filter: brightness(0.3) saturate(0.2) contrast(1.3) sepia(0.4); }
+      100% { filter: none; }
+    }
+
+    .big-avatar.blown {
+      animation: avatarBlown 0.5s ease-out forwards;
+    }
+    @keyframes avatarBlown {
+      0%   { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+      100% { transform: translate(160px, -100px) rotate(40deg) scale(0.2); opacity: 0; }
+    }
+    .big-avatar.comeback {
+      animation: avatarComeBack 0.8s ease-out forwards;
+    }
+    @keyframes avatarComeBack {
+      0%   { transform: translate(160px, -100px) rotate(40deg) scale(0.2); opacity: 0; }
+      100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+    }
+
+    /* ===== 上帝调试面板 ===== */
+    #debugPanel {
+      position: fixed; bottom: 20px; right: 20px; z-index: 500;
+      background: rgba(0,0,0,0.85); border: 1px solid #ffd700;
+      border-radius: 10px; padding: 12px; font-size: 13px;
+      color: #ffd700; min-width: 180px;
+    }
+    #debugPanel h4 { margin: 0 0 8px; font-size: 14px; text-align: center; }
+    #debugPanel label { display: block; margin-top: 6px; }
+    #debugPanel input { width: 50px; padding: 4px; border-radius: 4px; border: 1px solid #666; background: #222; color: #fff; text-align: center; }
+    #debugPanel button { padding: 4px 10px; border-radius: 4px; border: none; cursor: pointer; margin-top: 4px; font-size: 12px; }
+    #debugPanel .set-btn { background: #b8860b; color: #fff; }
+    #debugPanel .set-btn:hover { background: #daa520; }
+    #debugToggle {
+      position: fixed; bottom: 20px; right: 20px; z-index: 501;
+      background: #333; color: #ffd700; border: 1px solid #ffd700;
+      border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px;
+    }
+    #debugToggle:hover { background: #444; }
+    #debugPanel.hidden { display: none; }
+
+    /* ========== 游戏结束面板 ========== */
+    #gameoverOverlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 500;
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity 0.6s ease;
+    }
+    #gameoverOverlay.hidden { display: none; }
+    #gameoverOverlay.victory {
+      background: radial-gradient(ellipse at center, rgba(255,215,0,0.35) 0%, rgba(255,180,50,0.15) 40%, rgba(0,0,0,0.85) 100%);
+    }
+    #gameoverOverlay.defeat {
+      background: radial-gradient(ellipse at center, rgba(80,80,80,0.5) 0%, rgba(40,40,40,0.4) 40%, rgba(0,0,0,0.9) 100%);
+    }
+    .gameover-content {
+      text-align: center; padding: 40px 50px;
+      border-radius: 20px;
+      animation: gameoverPopIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .victory .gameover-content {
+      background: linear-gradient(135deg, rgba(255,240,200,0.95), rgba(255,220,150,0.9));
+      border: 3px solid #ffd700;
+      box-shadow: 0 0 60px rgba(255,215,0,0.5), 0 0 120px rgba(255,200,0,0.25);
+    }
+    .defeat .gameover-content {
+      background: linear-gradient(135deg, rgba(60,60,70,0.95), rgba(40,40,50,0.9));
+      border: 3px solid #666;
+      box-shadow: 0 0 40px rgba(0,0,0,0.6);
+    }
+    @keyframes gameoverPopIn {
+      0% { transform: scale(0.7); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    #gameoverTitle {
+      font-size: 42px; font-weight: 900; margin-bottom: 24px;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .victory #gameoverTitle { color: #b8860b; }
+    .defeat #gameoverTitle { color: #999; }
+    .gameover-stats {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 16px 24px; margin-bottom: 32px;
+    }
+    .stat-item {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 10px 16px; border-radius: 12px;
+    }
+    .victory .stat-item { background: rgba(255,215,0,0.2); }
+    .defeat .stat-item { background: rgba(255,255,255,0.06); }
+    .stat-label { font-size: 14px; margin-bottom: 4px; }
+    .victory .stat-label { color: #8b7355; }
+    .defeat .stat-label { color: #999; }
+    .stat-value { font-size: 32px; font-weight: 900; }
+    .victory .stat-value { color: #5c3d1a; }
+    .defeat .stat-value { color: #ddd; }
+    .gameover-buttons {
+      display: flex; gap: 16px; justify-content: center;
+    }
+    #rematchBtn, #leaveBtn {
+      padding: 14px 36px; border: none; border-radius: 12px;
+      font-size: 20px; font-weight: 700; cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    #rematchBtn:hover, #leaveBtn:hover { transform: translateY(-2px); }
+    #rematchBtn:active, #leaveBtn:active { transform: scale(0.96); }
+    #rematchBtn {
+      background: linear-gradient(135deg, #ffd700, #ffb800);
+      color: #3d2b00; box-shadow: 0 4px 16px rgba(255,180,0,0.4);
+    }
+    #leaveBtn {
+      background: linear-gradient(135deg, #555, #444);
+      color: #ccc; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    #rematchBtn.waiting {
+      opacity: 0.7; pointer-events: none;
+    }
+
+    .rps-btn {
+      padding: 16px 24px; font-size: 24px; border: 3px solid rgba(255,255,255,0.3);
+      border-radius: 16px; background: rgba(255,255,255,0.08);
+      color: #eee; cursor: pointer; transition: all 0.15s;
+    }
+    .rps-btn:hover { background: rgba(255,255,255,0.18); transform: translateY(-3px); }
+    .rps-btn:active { transform: scale(0.95); }
+    .rps-btn.chosen { border-color: #ffd700; background: rgba(255,215,0,0.15); }
+    .rps-btn.opponent { pointer-events: none; opacity: 0.4; }
+    #rpsPanel { color: #000; }
+    #rpsPanel h3 { color: #000; }
+    #rpsPanel .rps-btn { color: #000; border-color: rgba(0,0,0,0.3); background: rgba(0,0,0,0.04); }
+    #rpsPanel .rps-btn:hover { background: rgba(0,0,0,0.1); }
+    #rpsPanel .rps-btn.chosen { border-color: #b8860b; background: rgba(180,130,0,0.15); color: #5c3d1a; }
+    #rpsPanel .rps-btn.opponent { opacity: 0.35; }
+    #rpsStatus { color: #333; }
+    #rpsRevealNotice { color: #000; }
+    #rpsRevealNotice #rpsRevealSub { color: #555; }
+
+    .countdown {
+      text-align: center; font-size: 22px; font-weight: 700; margin-bottom: 4px;
+      transition: color 0.3s; color: #000;
+    }
+    .countdown.urgent { color: #cc0000; animation: countPulse 0.5s ease-in-out infinite; }
+    @keyframes countPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+  </style>
+</head>
+<body>
+  <!-- 加载进度提示 -->
+  <div id="loadingOverlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;">
+    <div style="font-size:24px;margin-bottom:16px;">⏳ 资源加载中...</div>
+    <div id="loadingProgress" style="width:280px;height:6px;background:#333;border-radius:3px;overflow:hidden;">
+      <div id="loadingBar" style="height:100%;width:0%;background:linear-gradient(90deg,#e94560,#ffd700);transition:width 0.3s;"></div>
+    </div>
+    <div id="loadingPercent" style="font-size:14px;color:#aaa;margin-top:8px;">0%</div>
+  </div>
+  <div id="app">
+    <div id="loginArea">
+      <input type="text" id="roomInput" placeholder="房间号（留空创建）" style="padding:10px; width:100%; margin-bottom:10px; border-radius:8px; border:none;">
+      <button id="joinBtn" style="width:100%; padding:12px; background:#e94560; color:white; border:none; border-radius:8px; font-size:18px;">进入游戏</button>
+    </div>
+    <div id="gameArea" class="hidden">
+      <div class="room-info">房间：<span id="roomIdDisplay"></span> <button id="bgmToggle" style="background:none;border:none;cursor:pointer;font-size:18px;vertical-align:middle;" title="音乐开关">🔊</button></div>
+      <div id="statusMessage"></div>
+      <div id="countdownTimer" class="countdown hidden"></div>
+      <div id="peaceBanner" class="peace-banner hidden">🕊️ 58同城和平模式 剩余 <span id="peaceRoundsLeft">0</span> 回合</div>
+      <div id="skillTargetHint" class="skill-hint hidden"><span id="skillTargetHintText">⚡ 请点击对方一只可选手作为目标</span><button id="cancelSkillTargetBtn" class="hint-cancel-btn">取消</button></div>
+      
+      <div class="battle-area">
+        <div class="player-area" id="oppArea">
+          <div class="player-header">
+            <div class="avatar-wrap" id="oppAvatarWrap">
+              <img class="big-avatar" id="oppAvatar" src="touxiang/touxiang1.jpg">
+              <div class="crosshair" id="oppCrosshair"></div>
+              <div class="shield-fx" id="oppShieldFx"><img src="texiao/hudun.png"></div>
+            </div>
+            <div class="player-side-info">
+              <div class="player-name" id="oppName">对手</div>
+              <div class="hp-row" id="oppHpRow"></div>
+              <div class="shield-row" id="oppShieldRow"></div>
+            </div>
+          </div>
+          <div class="hands">
+            <div class="hand-card opponent" id="oppLeftHand"></div>
+            <div class="hand-card opponent" id="oppRightHand"></div>
+          </div>
+          <div style="text-align:center; margin-top:4px;">
+            <span id="oppSsWrap" class="hidden" style="font-size:13px; color:#ff8c00;">🌀 仙人 <span id="oppSs">0</span></span>
+          </div>
+        </div>
+      </div>
+      <div class="battle-area">
+        <div class="player-area" id="myArea">
+          <div class="hands">
+            <div class="hand-card own" id="myLeftHand" draggable="true"></div>
+            <div class="hand-card own" id="myRightHand" draggable="true"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="profileSetup" class="hidden" style="text-align:center; margin: 15px 0;">
+        <div style="font-size:14px; color:#aaa; margin-bottom:5px;">选择头像</div>
+        <div class="avatar-select" id="avatarSelect"></div>
+        <input type="text" class="nickname-input" id="nicknameInput" placeholder="输入昵称（最多7字）" maxlength="7">
+      </div>
+
+      <div class="controls" id="controls">
+        <div id="turnInfo"></div>
+        <div id="opControls" class="hidden">
+          <select id="opSelect">
+            <option value="add">➕ 加法</option>
+            <option value="sub">➖ 减法</option>
+            <option value="mul">✖️ 乘法</option>
+            <option value="div">➗ 除法</option>
+          </select>
+          <button id="submitBtn">⚔️ 发动</button>
+          <button id="cancelSelection">取消选择</button>
+        </div>
+        <button id="readyBtn" class="hidden">准备</button>
+      </div>
+
+      <div class="my-info-panel" id="myInfoPanel">
+        <div class="player-header">
+          <div class="avatar-wrap" id="myAvatarWrap">
+            <img class="big-avatar" id="myAvatar" src="touxiang/touxiang1.jpg">
+            <div class="crosshair" id="myCrosshair"></div>
+            <div class="shield-fx" id="myShieldFx"><img src="texiao/hudun.png"></div>
+          </div>
+          <div class="player-side-info">
+            <div class="player-name" id="myName">你</div>
+            <div class="hp-row" id="myHpRow"></div>
+            <div class="shield-row" id="myShieldRow"></div>
+          </div>
+        </div>
+        <div class="extra-stats">
+          <span id="ssModeWrap" class="hidden">🌀 仙人 <span id="ssMode">0</span></span>
+        </div>
+      </div>
+
+      <!-- RPS结果公告（双方共用） -->
+      <div id="rpsRevealNotice" class="hidden" style="text-align:center; margin: 20px 0;">
+        <div style="font-size:30px; font-weight:900; margin-bottom:4px;" id="rpsRevealEmoji"></div>
+        <div style="font-size:22px; font-weight:700;" id="rpsRevealText"></div>
+        <div style="font-size:15px; color:#555; margin-top:6px;" id="rpsRevealSub"></div>
+      </div>
+
+      <!-- 石头剪刀布 -->
+      <div id="rpsPanel" class="hidden" style="text-align:center; margin: 20px 0;">
+        <h3 style="font-size:22px; margin-bottom:12px;">⚡ 石头剪刀布决定先手</h3>
+        <div id="rpsButtons" style="display:flex; gap:16px; justify-content:center;">
+          <button class="rps-btn" data-choice="rock">✊ 石头</button>
+          <button class="rps-btn" data-choice="scissors">✌️ 剪刀</button>
+          <button class="rps-btn" data-choice="paper">✋ 布</button>
+        </div>
+        <div id="rpsStatus" style="margin-top:10px; font-size:16px; color:#aaa;"></div>
+      </div>
+
+      <!-- 开局选手势 -->
+      <div id="handSelectPanel" class="hidden" style="text-align:center; margin: 20px 0;">
+        <!-- 选手势表单 -->
+        <div id="handSelectForm">
+          <h3 style="font-size:22px; margin-bottom:12px;">🎯 选择你的双手手势 (1~3)</h3>
+          <div style="display:flex; gap:30px; justify-content:center; margin-bottom:12px;">
+            <div>
+              <div style="color:#aaa; margin-bottom:4px;">左手</div>
+              <select id="initLeftHand" style="padding:8px 16px; font-size:20px; border-radius:8px;">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </div>
+            <div>
+              <div style="color:#aaa; margin-bottom:4px;">右手</div>
+              <select id="initRightHand" style="padding:8px 16px; font-size:20px; border-radius:8px;">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </div>
+          </div>
+          <button id="confirmHandsBtn" style="padding:12px 40px; background:#e94560; color:white; border:none; border-radius:10px; font-size:18px; cursor:pointer;">确认</button>
+          <div id="handSelectStatus" style="margin-top:10px; font-size:16px; color:#aaa;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="skillModal" class="modal-overlay hidden">
+      <div class="big-skill-panel">
+        <h3>选择技能</h3>
+        <div id="skillOptions" class="skill-choice-row"></div>
+        <button id="skipSkill">跳过（不发动）</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="skillCastNotice" class="cast-notice hidden"></div>
+  <div id="actionNotice" class="action-notice hidden"></div>
+
+  <!-- 游戏结束面板 -->
+  <div id="gameoverOverlay" class="hidden">
+    <div class="gameover-content">
+      <h1 id="gameoverTitle"></h1>
+      <div class="gameover-stats">
+        <div class="stat-item"><span class="stat-label">造成伤害</span><span class="stat-value" id="statDamageDealt">0</span></div>
+        <div class="stat-item"><span class="stat-label">受到伤害</span><span class="stat-value" id="statDamageTaken">0</span></div>
+        <div class="stat-item"><span class="stat-label">回复体力</span><span class="stat-value" id="statHpHealed">0</span></div>
+        <div class="stat-item"><span class="stat-label">护盾总量</span><span class="stat-value" id="statShieldGenerated">0</span></div>
+      </div>
+      <div class="gameover-buttons">
+        <button id="rematchBtn">再来一局</button>
+        <button id="leaveBtn">退出房间</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 绯红之王时间删除（覆盖敌方区域，抠黑底） -->
+  <video id="kcVideo" src="texiao/kc.mp4" style="display:none;" muted playsinline></video>
+  <canvas id="kcCanvas" style="position:fixed;z-index:390;pointer-events:none;display:none;"></canvas>
+  <audio id="kcAudio" src="music/king_crimson.mp3" preload="none"></audio>
+  <audio id="healAudio" src="music/heal.mp3" preload="none"></audio>
+  <audio id="hitAudio" src="music/hit.mp3" preload="none"></audio>
+  <audio id="wineAudio" src="music/jiu.mp3" preload="none"></audio>
+  <audio id="sealSelectAudio" src="music/seal_select.mp3" preload="none"></audio>
+  <audio id="seyoushuAudio" src="music/seyoushu_clip.mp3" preload="none"></audio>
+  <audio id="hougongshuAudio" src="music/hougongshu_clip.mp3" preload="none"></audio>
+  <audio id="cfshouleiAudio" src="music/cfshoulei_clip.mp3" preload="none"></audio>
+  <audio id="oulaAudio" src="music/oula_clip.mp3" preload="none"></audio>
+
+  <!-- 通用战斗特效元素 -->
+  <div id="fxSlash"><svg><line x1="10%" y1="15%" x2="90%" y2="85%" stroke="#fff" stroke-width="4" stroke-dasharray="20,10" filter="drop-shadow(0 0 6px #ff4444)"/></svg></div>
+  <img class="intel-hand-fly" id="fxIntelHandL" style="display:none">
+  <img class="intel-hand-fly" id="fxIntelHandR" style="display:none">
+  <div id="fxLaserL"></div>
+  <div id="fxLaserR"></div>
+  <div id="fxScreenFlash"></div>
+  <div id="fxKingCrimson"></div>
+  <div id="fxKCNegative"></div>
+  <div id="fxPeace"></div>
+  <div id="fxBigText"></div>
+  <div id="fxBow">🏹</div>
+  <div class="volley-arrow" id="volleyArrow1">🏹</div>
+  <div class="volley-arrow" id="volleyArrow2">🏹</div>
+  <div class="volley-arrow" id="volleyArrow3">🏹</div>
+  <div id="fxPunch">👊</div>
+  <div id="fxSlap">🖐️</div>
+  <div id="fxClock"></div>
+  <img id="fxNaruto" src="texiao/naruto_sage.png" onerror="this.style.display='none'">
+
+  <!-- 水滴特效 -->
+  <div class="water-drop" id="fxWaterDrop"></div>
+
+  <!-- 射击特效元素 -->
+  <div id="gunEffect">🔫</div>
+  <div id="bulletFx"></div>
+  <div class="muzzle-flash" id="muzzleFlash"></div>
+  <img id="fxGrenade" src="texiao/shoulei.png">
+  <div id="fxExplosion"></div>
+  <div id="fxDualGunL">🔫</div>
+  <div id="fxDualGunR">🔫</div>
+
+  <!-- 上帝调试面板 -->
+  <button id="debugToggle" onclick="document.getElementById('debugPanel').classList.toggle('hidden');">🛠️</button>
+  <div id="debugPanel" class="hidden">
+    <h4>🔧 上帝之手</h4>
+    <label>左手值 <input type="number" id="debugLeftVal" min="0" max="9" value="0"></label>
+    <button class="set-btn" id="debugSetLeft">设置左手</button>
+    <label>右手值 <input type="number" id="debugRightVal" min="0" max="9" value="0"></label>
+    <button class="set-btn" id="debugSetRight">设置右手</button>
+  </div>
+
+  <!-- 背景音乐（隐藏；不循环，靠 ended 事件随机切下一首） -->
+  <audio id="bgmAudio"></audio>
+
+  <script>
+    // ==================== 静态资源 CDN ====================
+    // 把 public 文件夹上传到 GitHub Pages / OSS 后，把下面的地址改成 CDN 地址
+    // 例如: const ASSET_BASE = 'https://你的用户名.github.io/dq/';
+    const ASSET_BASE = '';
+    function asset(path) { return ASSET_BASE + path; }
+
+    // ==================== 资源加载进度 ====================
+    (function() {
+      const resources = [
+        'background/background1.jpg',
+        'touxiang/touxiang1.jpg',
+        'images/leftfinger1.png', 'images/rightfinger1.png',
+        'images/leftfinger2.png', 'images/rightfinger2.png',
+        'images/leftfinger3.png', 'images/rightfinger3.png',
+        'texiao/hudun.png', 'texiao/shoulei.png',
+      ];
+      let loaded = 0;
+      const total = resources.length;
+      const bar = document.getElementById('loadingBar');
+      const percent = document.getElementById('loadingPercent');
+      const overlay = document.getElementById('loadingOverlay');
+
+      function updateProgress() {
+        loaded++;
+        const pct = Math.round((loaded / total) * 100);
+        bar.style.width = pct + '%';
+        percent.textContent = pct + '%';
+        if (loaded >= total) {
+          setTimeout(() => { overlay.style.display = 'none'; }, 400);
+        }
+      }
+
+      resources.forEach(src => {
+        const img = new Image();
+        img.onload = updateProgress;
+        img.onerror = updateProgress;
+        img.src = asset(src);
+      });
+    })();
+
+    // ==================== 修补硬编码的资源引用 ====================
+    function applyAssetBase() {
+      // 修补 HTML 中的 <img src>, <audio src>, <video src>, <source src>
+      document.querySelectorAll('img[src], audio[src], video[src], source[src]').forEach(el => {
+        const raw = el.getAttribute('src');
+        if (raw && !raw.startsWith('http') && !raw.startsWith('data:') && !raw.startsWith('//')) {
+          el.setAttribute('src', asset(raw));
+        }
+      });
+      // 修补 CSS 中 body 背景图
+      if (ASSET_BASE) {
+        document.body.style.backgroundImage = 'url(' + asset('background/background1.jpg') + ')';
+      }
+    }
+    document.addEventListener('DOMContentLoaded', applyAssetBase);
+
+    // ==================== 头像预设 ====================
+    const AVATARS = [
+      'touxiang/touxiang1.jpg',
+      'touxiang/touxiang2.jpg',
+      'touxiang/touxiang3.jpg',
+      'touxiang/touxiang4.jpg',
+      'touxiang/touxiang5.jpg',
+      'touxiang/touxiang6.jpg'
+    ];
+    let myAvatar = AVATARS[0];
+    let myNickname = '';
+
+    // ==================== 背景音乐 ====================
+    const bgmList = [
+      'music/bgm1.mp3',
+      'music/bgm2.mp3',
+      'music/bgm3.mp3',
+    ];
+    const endMusic = 'music/bgm_end.mp3';
+    const bgmAudio = document.getElementById('bgmAudio');
+    bgmAudio.volume = 0.07;
+    bgmAudio.addEventListener('ended', () => {
+      if (bgmAudio.src.endsWith(endMusic)) return;
+      if (bgmOn) playRandomBGM();
+    });
+
+    function playRandomBGM() {
+      bgmAudio.pause();
+      bgmAudio.currentTime = 0;
+      // 排除当前在放的曲目，强制切到另一首
+      const currentSrc = bgmAudio.src;
+      const pool = bgmList.filter(t => !currentSrc.endsWith(t));
+      const choices = pool.length > 0 ? pool : bgmList;
+      bgmAudio.src = asset(choices[Math.floor(Math.random() * choices.length)]);
+      bgmAudio.play().catch(err => {
+        console.warn('音乐自动播放被阻止，请手动开始游戏');
+      });
+    }
+
+    function playEndMusic() {
+      if (!bgmOn) return;
+      if (bgmAudio.src.includes(endMusic)) return;
+      bgmAudio.pause();
+      bgmAudio.currentTime = 0;
+      bgmAudio.src = asset(endMusic);
+      bgmAudio.play().catch(err => {});
+    }
+
+    // ==================== 音乐开关 ====================
+    let bgmOn = false;
+    const bgmToggle = document.getElementById('bgmToggle');
+    bgmToggle.addEventListener('click', () => {
+      bgmOn = !bgmOn;
+      if (bgmOn) {
+        bgmToggle.textContent = '🔊';
+        playRandomBGM();
+      } else {
+        bgmToggle.textContent = '🔇';
+        bgmAudio.pause();
+      }
+    });
+
+    // ==================== 图片路径 ====================
+    function getHandImageSrc(isMe, hand, value) {
+      const side = hand === 'left' ? 'left' : 'right';
+      return asset('images/' + side + 'finger' + value + '.png');
+    }
+    function flipTargetHand(hand) {
+      return hand === 'left' ? 'right' : 'left';
+    }
+
+    let ws, myPlayerId, currentState;
+    let selectedAttackHand = null, selectedTargetHand = null;
+    let pendingSkillOptions = [], pendingTargetSkillId = null;
+    let gameStarted = false;
+    let animLocked = false;
+    let _rpsRevealed = false; // RPS结果公告是否已展示
+    let _rpsTieTimer = null;
+    let _rpsLastEvent = 0; // 避免重复播放音效
+    let _lastStateSeq = 0; // P2P 去重
+
+    const loginArea = document.getElementById('loginArea');
+    const gameArea = document.getElementById('gameArea');
+    const roomIdDisplay = document.getElementById('roomIdDisplay');
+    const statusMsg = document.getElementById('statusMessage');
+    const countdownTimer = document.getElementById('countdownTimer');
+    const peaceBanner = document.getElementById('peaceBanner');
+    const peaceRoundsLeft = document.getElementById('peaceRoundsLeft');
+    const oppLeft = document.getElementById('oppLeftHand');
+    const oppRight = document.getElementById('oppRightHand');
+    const myLeft = document.getElementById('myLeftHand');
+    const myRight = document.getElementById('myRightHand');
+    const oppAvatar = document.getElementById('oppAvatar');
+    const myAvatarImg = document.getElementById('myAvatar');
+    const oppHpRow = document.getElementById('oppHpRow');
+    const oppShieldRow = document.getElementById('oppShieldRow');
+    const myHpRow = document.getElementById('myHpRow');
+    const myShieldRow = document.getElementById('myShieldRow');
+    const ssModeEl = document.getElementById('ssMode');
+    const ssModeWrap = document.getElementById('ssModeWrap');
+    const oppSsEl = document.getElementById('oppSs');
+    const oppSsWrap = document.getElementById('oppSsWrap');
+    const oppAvatarWrap = document.getElementById('oppAvatarWrap');
+    const myAvatarWrap = document.getElementById('myAvatarWrap');
+    const skillCastNotice = document.getElementById('skillCastNotice');
+    const actionNotice = document.getElementById('actionNotice');
+    const gameoverOverlay = document.getElementById('gameoverOverlay');
+    const gameoverTitle = document.getElementById('gameoverTitle');
+    const statDamageDealt = document.getElementById('statDamageDealt');
+    const statDamageTaken = document.getElementById('statDamageTaken');
+    const statHpHealed = document.getElementById('statHpHealed');
+    const statShieldGenerated = document.getElementById('statShieldGenerated');
+    const rematchBtn = document.getElementById('rematchBtn');
+    const leaveBtn = document.getElementById('leaveBtn');
+    const rpsPanel = document.getElementById('rpsPanel');
+    const rpsButtons = document.getElementById('rpsButtons');
+    const rpsStatus = document.getElementById('rpsStatus');
+    const handSelectPanel = document.getElementById('handSelectPanel');
+    const rpsRevealNotice = document.getElementById('rpsRevealNotice');
+    const rpsRevealEmoji = document.getElementById('rpsRevealEmoji');
+    const rpsRevealText = document.getElementById('rpsRevealText');
+    const rpsRevealSub = document.getElementById('rpsRevealSub');
+    const handSelectForm = document.getElementById('handSelectForm');
+    const initLeftHand = document.getElementById('initLeftHand');
+    const initRightHand = document.getElementById('initRightHand');
+    const confirmHandsBtn = document.getElementById('confirmHandsBtn');
+    const handSelectStatus = document.getElementById('handSelectStatus');
+    const skillTargetHintText = document.getElementById('skillTargetHintText');
+    const turnInfo = document.getElementById('turnInfo');
+    const opControls = document.getElementById('opControls');
+    const opSelect = document.getElementById('opSelect');
+    const submitBtn = document.getElementById('submitBtn');
+    const cancelBtn = document.getElementById('cancelSelection');
+    const readyBtn = document.getElementById('readyBtn');
+    const skillModal = document.getElementById('skillModal');
+    const skillOptionsDiv = document.getElementById('skillOptions');
+    const skipSkillBtn = document.getElementById('skipSkill');
+    const skillTargetHint = document.getElementById('skillTargetHint');
+    const cancelSkillTargetBtn = document.getElementById('cancelSkillTargetBtn');
+    const profileSetup = document.getElementById('profileSetup');
+    const avatarSelect = document.getElementById('avatarSelect');
+    const nicknameInput = document.getElementById('nicknameInput');
+    const oppNameEl = document.getElementById('oppName');
+    const myNameEl = document.getElementById('myName');
+    const oppCrosshair = document.getElementById('oppCrosshair');
+    const myCrosshair = document.getElementById('myCrosshair');
+    const oppShieldFx = document.getElementById('oppShieldFx');
+    const myShieldFx = document.getElementById('myShieldFx');
+    const gunEffect = document.getElementById('gunEffect');
+    const bulletFx = document.getElementById('bulletFx');
+    const muzzleFlash = document.getElementById('muzzleFlash');
+    const fxGrenade = document.getElementById('fxGrenade');
+    const fxExplosion = document.getElementById('fxExplosion');
+    const fxDualGunL = document.getElementById('fxDualGunL');
+    const fxDualGunR = document.getElementById('fxDualGunR');
+    const fxWaterDrop = document.getElementById('fxWaterDrop');
+    const fxSlash = document.getElementById('fxSlash');
+    const fxScreenFlash = document.getElementById('fxScreenFlash');
+    const fxKingCrimson = document.getElementById('fxKingCrimson');
+    const fxKCNegative = document.getElementById('fxKCNegative');
+    const fxPeace = document.getElementById('fxPeace');
+    const fxBigText = document.getElementById('fxBigText');
+    const fxBow = document.getElementById('fxBow');
+    const volleyArrows = [
+      document.getElementById('volleyArrow1'),
+      document.getElementById('volleyArrow2'),
+      document.getElementById('volleyArrow3')
+    ];
+    const fxPunch = document.getElementById('fxPunch');
+    const fxSlap = document.getElementById('fxSlap');
+    const fxClock = document.getElementById('fxClock');
+    const fxNaruto = document.getElementById('fxNaruto');
+    const fxIntelHandL = document.getElementById('fxIntelHandL');
+    const fxIntelHandR = document.getElementById('fxIntelHandR');
+    const fxLaserL = document.getElementById('fxLaserL');
+    const fxLaserR = document.getElementById('fxLaserR');
+    const kcVideo = document.getElementById('kcVideo');
+    const kcCanvas = document.getElementById('kcCanvas');
+    const kcAudio = document.getElementById('kcAudio');
+    const healAudio = document.getElementById('healAudio');
+    const hitAudioEl = document.getElementById('hitAudio');
+    const wineAudio = document.getElementById('wineAudio');
+    const sealSelectAudio = document.getElementById('sealSelectAudio');
+    const seyoushuAudio = document.getElementById('seyoushuAudio');
+    const hougongshuAudio = document.getElementById('hougongshuAudio');
+    const cfshouleiAudio = document.getElementById('cfshouleiAudio');
+    const oulaAudio = document.getElementById('oulaAudio');
+    let kcAnimId = null;
+    const appContainer = document.getElementById('app');
+
+    // ===== WebRTC P2P 直连 =====
+    const rtcConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ]
+    };
+    let peerConnection = null;
+    let dataChannel = null;
+    let isHost = false;
+    let p2pReady = false;
+
+    function setupDataChannel(channel, label) {
+      channel.onopen = () => {
+        p2pReady = true;
+        statusMsg.textContent = isHost ? 'P2P 已连接（房主）' : 'P2P 已连接（直连）';
+      };
+      channel.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (isHost) {
+          // 房主：代发客机消息到本地服务器（附带 senderId 标明身份）
+          if (ws && ws.readyState === 1 && msg.senderId) {
+            ws._rawSend(JSON.stringify(msg));
+          }
+        } else {
+          // 客机：接收房主转发来的服务器消息
+          handleMessage(msg);
+        }
+      };
+      channel.onclose = () => {
+        p2pReady = false;
+        statusMsg.textContent = 'P2P 断开，回退服务器模式';
+      };
+    }
+
+    function initHostP2P() {
+      isHost = true;
+      peerConnection = new RTCPeerConnection(rtcConfig);
+      dataChannel = peerConnection.createDataChannel('game');
+      setupDataChannel(dataChannel, 'host');
+
+      peerConnection.onicecandidate = (e) => {
+        if (e.candidate && ws && ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'SIGNAL_ICE', candidate: e.candidate }));
+        }
+      };
+
+      peerConnection.createOffer().then(offer => {
+        return peerConnection.setLocalDescription(offer);
+      }).then(() => {
+        if (ws && ws.readyState === 1) {
+          const desc = peerConnection.localDescription;
+          ws.send(JSON.stringify({ type: 'SIGNAL_OFFER', offer: { type: desc.type, sdp: desc.sdp } }));
+        }
+      }).catch(err => console.error('创建 Offer 失败', err));
+    }
+
+    function initGuestP2P() {
+      isHost = false;
+      peerConnection = new RTCPeerConnection(rtcConfig);
+
+      peerConnection.ondatachannel = (e) => {
+        dataChannel = e.channel;
+        setupDataChannel(dataChannel, 'guest');
+      };
+
+      peerConnection.onicecandidate = (e) => {
+        if (e.candidate && ws && ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'SIGNAL_ICE', candidate: e.candidate }));
+        }
+      };
+    }
+
+    function handleSignal(data) {
+      if (!peerConnection) return;
+      try {
+        if (data.type === 'SIGNAL_OFFER') {
+          peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer)).then(() => {
+            return peerConnection.createAnswer();
+          }).then(answer => {
+            return peerConnection.setLocalDescription(answer);
+          }).then(() => {
+            if (ws && ws.readyState === 1) {
+              const desc = peerConnection.localDescription;
+              ws.send(JSON.stringify({ type: 'SIGNAL_ANSWER', answer: { type: desc.type, sdp: desc.sdp } }));
+            }
+          }).catch(err => console.error('处理 Offer 失败', err));
+        } else if (data.type === 'SIGNAL_ANSWER') {
+          peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
+            .catch(err => console.error('设置 Answer 失败', err));
+        } else if (data.type === 'SIGNAL_ICE') {
+          peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
+            .catch(err => console.error('添加 ICE 失败', err));
+        }
+      } catch (e) {
+        console.error('信令处理失败', e);
+      }
+    }
+
+    // 再来一局
+    rematchBtn.addEventListener('click', () => {
+      if (rematchBtn.classList.contains('waiting')) return;
+      rematchBtn.textContent = '等待对手...';
+      rematchBtn.classList.add('waiting');
+      rematchBtn.disabled = true;
+      ws.send(JSON.stringify({ type: 'REMATCH' }));
+    });
+
+    // 退出房间
+    leaveBtn.addEventListener('click', () => {
+      if (dataChannel) { dataChannel.close(); dataChannel = null; }
+      if (peerConnection) { peerConnection.close(); peerConnection = null; }
+      p2pReady = false;
+      if (ws) ws.close();
+      gameoverOverlay.classList.add('hidden');
+      gameArea.classList.add('hidden');
+      loginArea.classList.remove('hidden');
+      gameStarted = false;
+      _rpsRevealed = false;
+      clearTimeout(_rpsTieTimer);
+      currentState = null;
+      bgmAudio.pause();
+      bgmAudio.currentTime = 0;
+    });
+
+    // 石头剪刀布 按钮
+    document.querySelectorAll('.rps-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.classList.contains('chosen')) return;
+        document.querySelectorAll('.rps-btn').forEach(b => b.classList.add('opponent'));
+        btn.classList.add('chosen');
+        btn.classList.remove('opponent');
+        sfxRpsSelect();
+        ws.send(JSON.stringify({ type: 'RPS_CHOICE', choice: btn.dataset.choice }));
+      });
+    });
+
+    // 确认选手势
+    confirmHandsBtn.addEventListener('click', () => {
+      confirmHandsBtn.disabled = true;
+      confirmHandsBtn.textContent = '已确认';
+      sfxHandConfirm();
+      ws.send(JSON.stringify({
+        type: 'HAND_SELECT',
+        leftHand: parseInt(initLeftHand.value),
+        rightHand: parseInt(initRightHand.value),
+      }));
+    });
+
+    // 初始化头像选择
+    AVATARS.forEach((src, i) => {
+      const img = document.createElement('img');
+      img.src = asset(src);
+      img.className = 'avatar-option' + (i === 0 ? ' selected' : '');
+      img.addEventListener('click', () => {
+        document.querySelectorAll('.avatar-option').forEach(el => el.classList.remove('selected'));
+        img.classList.add('selected');
+        myAvatar = src;
+        myAvatarImg.src = asset(src);
+        sendProfileUpdate();
+      });
+      avatarSelect.appendChild(img);
+    });
+
+    nicknameInput.addEventListener('input', () => {
+      myNickname = nicknameInput.value.trim().slice(0, 7);
+      myNameEl.textContent = myNickname || '你';
+      sendProfileUpdate();
+    });
+
+    function sendProfileUpdate() {
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'PROFILE', avatar: myAvatar, nickname: myNickname }));
+      }
+    }
+
+    document.getElementById('joinBtn').addEventListener('click', () => {
+      connect(document.getElementById('roomInput').value.trim());
+    });
+
+    function connect(room) {
+      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      ws = new WebSocket(`${protocol}://${window.location.host}?room=${room}`);
+      ws.onopen = () => {
+        loginArea.classList.add('hidden');
+        gameArea.classList.remove('hidden');
+        profileSetup.classList.remove('hidden');
+        statusMsg.textContent = '已连接，等待对手...';
+
+        // 保存原始 send 引用，包装 P2P 路由
+        ws._rawSend = ws.send.bind(ws);
+        ws.send = function(data) {
+          const msg = JSON.parse(data);
+          // 信令消息始终走 WebSocket
+          if (msg.type === 'SIGNAL_OFFER' || msg.type === 'SIGNAL_ANSWER' || msg.type === 'SIGNAL_ICE') {
+            ws._rawSend(data); return;
+          }
+          // 客机 P2P 就绪 → 游戏消息走 DataChannel（附带 senderId）
+          if (p2pReady && !isHost && dataChannel && dataChannel.readyState === 'open') {
+            msg.senderId = myPlayerId;
+            dataChannel.send(JSON.stringify(msg)); return;
+          }
+          ws._rawSend(data);
+        };
+      };
+      ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+
+        // 客机 P2P 就绪时，STATE_UPDATE 走 DataChannel 更快，WS 的跳过（去重）
+        if (p2pReady && !isHost && data.type === 'STATE_UPDATE') {
+          return;
+        }
+
+        // 房主 P2P 就绪时转发 STATE_UPDATE 给客机（最大消息，走 P2P 更快）
+        if (p2pReady && isHost && dataChannel && dataChannel.readyState === 'open' &&
+            data.type === 'STATE_UPDATE') {
+          dataChannel.send(JSON.stringify(data));
+        }
+
+        // 信令消息 → 单独处理
+        if (data.type === 'SIGNAL_OFFER' || data.type === 'SIGNAL_ANSWER' || data.type === 'SIGNAL_ICE') {
+          handleSignal(data);
+          return;
+        }
+
+        handleMessage(data);
+      };
+      ws.onclose = () => {
+        statusMsg.textContent = '连接断开，请刷新页面';
+        if (dataChannel) { dataChannel.close(); dataChannel = null; }
+        if (peerConnection) { peerConnection.close(); peerConnection = null; }
+        p2pReady = false;
+      };
+    }
+
+    function handleMessage(data) {
+      switch(data.type) {
+        case 'ROOM_INFO':
+          myPlayerId = data.playerId;
+          roomIdDisplay.textContent = data.roomId;
+          statusMsg.textContent = '房间号已生成，复制给朋友加入';
+          break;
+        case 'MATCH_FOUND':
+          statusMsg.textContent = '对手已加入，请点击准备！';
+          readyBtn.classList.remove('hidden');
+          profileSetup.classList.remove('hidden');
+          // 房主（players[0]）发起 P2P 连接
+          if (data.players && data.players[0].id === myPlayerId) {
+            setTimeout(() => initHostP2P(), 300);
+          } else {
+            setTimeout(() => initGuestP2P(), 300);
+          }
+          break;
+        case 'WAITING_OPPONENT':
+          statusMsg.textContent = '等待对方准备...';
+          break;
+        case 'STATE_UPDATE':
+          // 去重：相同 _stateSeq 已通过 DataChannel 处理过则跳过
+          if (data.state._stateSeq && data.state._stateSeq === _lastStateSeq) break;
+          if (data.state._stateSeq) _lastStateSeq = data.state._stateSeq;
+          currentState = data.state;
+          if (statusMsg.textContent === '等待对方准备...' && currentState.phase !== 'preGame') {
+            statusMsg.textContent = '';
+          }
+          if (!gameStarted && currentState.phase === 'playing') {
+            gameStarted = true;
+            bgmOn = true;
+            bgmToggle.textContent = '🔊';
+            playRandomBGM();
+          }
+          // 再来一局后重置
+          if (currentState._newGame) {
+            gameoverOverlay.classList.add('hidden');
+            _rpsRevealed = false;
+            gameStarted = true;
+            bgmOn = true;
+            bgmToggle.textContent = '🔊';
+            playRandomBGM();
+          }
+          renderGame(currentState);
+          if (currentState.phase !== 'preGame') profileSetup.classList.add('hidden');
+          // 对手操作提示（仅显示对方的操作）
+          const notice = data.state.lastActionNotice;
+          if (notice && notice.attackerId !== myPlayerId &&
+              notice.time !== actionNotice._lastTime) {
+            actionNotice._lastTime = notice.time;
+            showActionNotice(notice.text);
+          }
+          // 连动提示（延迟避免和运算提示重合）
+          const etn = data.state.extraTurnNotice;
+          if (etn && etn.time !== actionNotice._extraTurnTime) {
+            actionNotice._extraTurnTime = etn.time;
+            const delay = notice && notice.attackerId !== myPlayerId ? 1800 : 0;
+            setTimeout(() => showActionNotice(etn.text), delay);
+          }
+          break;
+        case 'SKILL_CHOICE_REQUEST':
+          pendingSkillOptions = data.options;
+          showSkillPanel(pendingSkillOptions);
+          break;
+        case 'ERROR':
+          alert(data.message);
+          if (currentState?.turn === myPlayerId && currentState?.phase === 'playing') {
+            opControls.classList.remove('hidden');
+            refreshOpSelect();
+          }
+          break;
+        case 'RESUME_TURN':
+          if (currentState?.turn === myPlayerId && currentState?.phase === 'playing') {
+            opControls.classList.remove('hidden');
+            refreshOpSelect();
+          }
+          break;
+        case 'OPPONENT_DISCONNECTED':
+          statusMsg.textContent = '对手掉线';
+          if (!gameoverOverlay.classList.contains('hidden')) {
+            rematchBtn.textContent = '对手已离开';
+            rematchBtn.classList.add('waiting');
+            rematchBtn.disabled = true;
+          }
+          break;
+        case 'NOTICE':
+          statusMsg.textContent = data.message;
+          clearTimeout(statusMsg._timer);
+          statusMsg._timer = setTimeout(() => { statusMsg.textContent = ''; }, 1500);
+          break;
+        case 'SKILL_CAST': {
+          const who = data.casterId === myPlayerId ? '你' : '对手';
+          showSkillCast(`✨ ${who} 发动 ${data.description}`, data.casterId);
+          playSkillEffect(data.skillId, data.casterId, data.targetHand);
+          break;
+        }
+        case 'ACTION_NOTICE': {
+          showActionNotice(data.message);
+          break;
+        }
+        case 'PLAY_TARGET_EFFECT': {
+          if (data.skillId === 'single_4') {
+            playKingCrimsonLocal();
+          }
+          break;
+        }
+        case 'SKILL_AUTO_TARGET':
+          pendingSkillOptions = [];
+          enterSkillTargetMode(data.skillId, data.description);
+          break;
+        case 'REMATCH_STATUS':
+          if (data.opponentLeft) {
+            rematchBtn.textContent = '对手已离开';
+            rematchBtn.classList.add('waiting');
+            rematchBtn.disabled = true;
+          } else if (data.readyCount >= 2) {
+            gameoverOverlay.classList.add('hidden');
+          }
+          break;
+      }
+    }
+
+    function updateCountdown(state) {
+      if (!state?.phaseDeadline || state.phase === 'gameOver' || state.phase === 'preGame' || animLocked
+          || !skillTargetHint.classList.contains('hidden') || !skillModal.classList.contains('hidden')) {
+        countdownTimer.classList.add('hidden');
+        return;
+      }
+      const remain = Math.max(0, Math.ceil((state.phaseDeadline - Date.now()) / 1000));
+      countdownTimer.classList.remove('hidden');
+      countdownTimer.textContent = `⏱ ${remain}s`;
+      if (remain <= 5) countdownTimer.classList.add('urgent');
+      else countdownTimer.classList.remove('urgent');
+
+      // 位置：自己回合→自己头像下方，对手回合→对手头像上方，RPS/选手势→居中
+      if (state.phase === 'playing') {
+        countdownTimer.style.position = 'fixed';
+        if (state.turn === myPlayerId) {
+          const r = myAvatarWrap.getBoundingClientRect();
+          countdownTimer.style.top = (r.bottom + 6) + 'px';
+          countdownTimer.style.left = (r.left + r.width / 2) + 'px';
+          countdownTimer.style.transform = 'translateX(-50%)';
+        } else {
+          const r = oppAvatarWrap.getBoundingClientRect();
+          countdownTimer.style.top = (r.top - 34) + 'px';
+          countdownTimer.style.left = (r.left + r.width / 2) + 'px';
+          countdownTimer.style.transform = 'translateX(-50%)';
+        }
+      } else {
+        countdownTimer.style.position = '';
+        countdownTimer.style.top = '';
+        countdownTimer.style.left = '';
+        countdownTimer.style.transform = '';
+      }
+    }
+    setInterval(() => { if (currentState) updateCountdown(currentState); }, 500);
+
+    function renderGame(state) {
+      if (!state?.players) return;
+      const me = state.players.find(p => p.id === myPlayerId);
+      const opp = state.players.find(p => p.id !== myPlayerId);
+      if (!me || !opp) return;
+
+      updateCountdown(state);
+
+      // --- 石头剪刀布 阶段 ---
+      if (state.phase === 'rps') {
+        gameoverOverlay.classList.add('hidden');
+        rpsPanel.classList.remove('hidden');
+        handSelectPanel.classList.add('hidden');
+        opControls.classList.add('hidden');
+        turnInfo.textContent = '';
+        _rpsRevealed = false;
+        // 重赛时停掉结束BGM
+        if (gameStarted && bgmAudio.src.includes('bgm_end')) {
+          bgmAudio.pause();
+          bgmAudio.currentTime = 0;
+        }
+        clearTimeout(_rpsTieTimer);
+        // 平局公告
+        if (state.rpsTie) {
+          rpsButtons.classList.add('hidden');
+          rpsStatus.textContent = '';
+          if (_rpsLastEvent !== state.phaseDeadline) { sfxRpsTie(); _rpsLastEvent = state.phaseDeadline; }
+          const rpsMap = { rock: '石头', scissors: '剪刀', paper: '布' };
+          const myChoice = state._lastRpsChoices ? state._lastRpsChoices[myPlayerId] : null;
+          const oppChoice = state._lastRpsChoices ? state._lastRpsChoices[opp.id] : null;
+          rpsRevealNotice.classList.remove('hidden');
+          rpsRevealEmoji.textContent = '🤝';
+          rpsRevealText.textContent = myChoice ? `你出 ${rpsMap[myChoice]} vs 对手 ${rpsMap[oppChoice]}` : '双方出拳相同';
+          rpsRevealSub.textContent = '平局！再来一轮';
+          _rpsTieTimer = setTimeout(() => {
+            rpsButtons.classList.remove('hidden');
+            rpsRevealNotice.classList.add('hidden');
+            document.querySelectorAll('.rps-btn').forEach(b => { b.classList.remove('chosen', 'opponent'); });
+            rpsStatus.textContent = '请重新选择';
+          }, 1500);
+        } else if (state.rpsChoices[myPlayerId]) {
+          document.querySelectorAll('.rps-btn').forEach(b => b.classList.add('opponent'));
+          const myBtn = document.querySelector(`.rps-btn[data-choice="${state.rpsChoices[myPlayerId]}"]`);
+          if (myBtn) { myBtn.classList.add('chosen'); myBtn.classList.remove('opponent'); }
+          rpsStatus.textContent = '等待对手选择...';
+        } else {
+          // 新一轮RPS，清掉旧状态
+          document.querySelectorAll('.rps-btn').forEach(b => { b.classList.remove('chosen', 'opponent'); });
+          rpsStatus.textContent = '';
+        }
+        return;
+      }
+
+      // --- 选手势 阶段 ---
+      if (state.phase === 'handSelect') {
+        rpsPanel.classList.add('hidden');
+        handSelectPanel.classList.remove('hidden');
+        opControls.classList.add('hidden');
+        turnInfo.textContent = '';
+
+        if (state.rpsResult && !_rpsRevealed) {
+          // 先展示RPS结果公告
+          const rpsMap = { rock: '石头', scissors: '剪刀', paper: '布' };
+          const myChoice = state.rpsResult.choices[myPlayerId];
+          const oppChoice = state.rpsResult.choices[opp.id];
+          const iWon = state.rpsResult.winnerId === myPlayerId;
+          if (_rpsLastEvent !== state.phaseDeadline) { iWon ? sfxRpsWin() : sfxRpsLose(); _rpsLastEvent = state.phaseDeadline; }
+          rpsRevealNotice.classList.remove('hidden');
+          handSelectForm.classList.add('hidden');
+          rpsRevealEmoji.textContent = iWon ? '🏆' : '😞';
+          rpsRevealText.textContent = `你出 ${rpsMap[myChoice]} vs 对手 ${rpsMap[oppChoice]}`;
+          rpsRevealSub.textContent = iWon ? '你赢了！获得先手 ⚡' : '对手赢了！对手先手';
+          setTimeout(() => { _rpsRevealed = true; renderGame(currentState); }, 2500);
+        } else {
+          // 公告播完，显示选手势表单
+          rpsRevealNotice.classList.add('hidden');
+          handSelectForm.classList.remove('hidden');
+          if (state.handChoices[myPlayerId]) {
+            confirmHandsBtn.disabled = true;
+            confirmHandsBtn.textContent = '已确认';
+            initLeftHand.disabled = true;
+            initRightHand.disabled = true;
+            if (Object.keys(state.handChoices).length < 2) {
+              handSelectStatus.textContent = '等待对手确认...';
+            }
+          } else {
+            confirmHandsBtn.disabled = false;
+            confirmHandsBtn.textContent = '确认';
+            initLeftHand.disabled = false;
+            initRightHand.disabled = false;
+            handSelectStatus.textContent = '';
+          }
+        }
+        return;
+      }
+
+      // --- 正常游戏阶段 ---
+      _rpsRevealed = false;
+      rpsPanel.classList.add('hidden');
+      handSelectPanel.classList.add('hidden');
+      rpsRevealNotice.classList.add('hidden');
+      handSelectStatus.textContent = '';
+
+      oppAvatar.src = asset(opp.avatar || AVATARS[0]);
+      oppNameEl.textContent = opp.nickname || '对手';
+      myAvatarImg.src = asset(myAvatar);
+      myNameEl.textContent = myNickname || '你';
+
+      const renderHandImg = (handEl, isMe, hand, value) => {
+        handEl.innerHTML = `<img src="${getHandImageSrc(isMe, hand, value)}">`;
+      };
+      renderHandImg(oppLeft, false, 'right', opp.rightHand);
+      renderHandImg(oppRight, false, 'left', opp.leftHand);
+      renderHandImg(myLeft, true, 'left', me.leftHand);
+      renderHandImg(myRight, true, 'right', me.rightHand);
+
+      renderHearts(oppHpRow, opp.hp);
+      renderShield(oppShieldRow, opp.shield, opp.shieldTurns);
+      updateHandClass(oppLeft, opp, 'right');
+      updateHandClass(oppRight, opp, 'left');
+      if (opp.sevenSevenActive > 0) {
+        oppSsWrap.classList.remove('hidden');
+        oppSsEl.textContent = opp.sevenSevenActive;
+        oppAvatarWrap.classList.add('sage-ripple');
+      } else {
+        oppSsWrap.classList.add('hidden');
+        oppAvatarWrap.classList.remove('sage-ripple');
+      }
+
+      renderHearts(myHpRow, me.hp);
+      renderShield(myShieldRow, me.shield, me.shieldTurns);
+      if (me.sevenSevenActive > 0) {
+        ssModeWrap.classList.remove('hidden');
+        ssModeEl.textContent = me.sevenSevenActive;
+        myAvatarWrap.classList.add('sage-ripple');
+      } else {
+        ssModeWrap.classList.add('hidden');
+        myAvatarWrap.classList.remove('sage-ripple');
+      }
+      updateHandClass(myLeft, me, 'left');
+      updateHandClass(myRight, me, 'right');
+
+      if (state.peaceActive) {
+        peaceBanner.classList.remove('hidden');
+        peaceRoundsLeft.textContent = state.peaceRounds;
+      } else {
+        peaceBanner.classList.add('hidden');
+      }
+
+      const isMyTurn = state.phase === 'playing' && state.turn === myPlayerId;
+      turnInfo.textContent = isMyTurn ? '⭐ 轮到你了' : '⏳ 对手回合';
+      opControls.classList.toggle('hidden', !isMyTurn);
+      readyBtn.classList.add('hidden');
+      if (!isMyTurn) clearSelection();
+      myLeft.draggable = isMyTurn;
+      myRight.draggable = isMyTurn;
+      refreshOpSelect();
+
+      if (state.phase === 'gameOver') {
+        opControls.classList.add('hidden');
+        showGameoverOverlay(state, me);
+      }
+    }
+
+    function showGameoverOverlay(state, me) {
+      const isVictory = state.winner === myPlayerId;
+      // 等待最后一个动画播完再弹出
+      const tryShow = () => {
+        if (animLocked) { setTimeout(tryShow, 200); return; }
+        gameoverOverlay.classList.remove('hidden');
+        gameoverOverlay.className = isVictory ? 'victory' : 'defeat';
+        gameoverTitle.textContent = isVictory ? '🏆 胜 利' : '💀 失 败';
+        const s = me.stats || {};
+        statDamageDealt.textContent = s.damageDealt || 0;
+        statDamageTaken.textContent = s.damageTaken || 0;
+        statHpHealed.textContent = s.hpHealed || 0;
+        statShieldGenerated.textContent = s.shieldGenerated || 0;
+        rematchBtn.textContent = '再来一局';
+        rematchBtn.classList.remove('waiting');
+        rematchBtn.disabled = false;
+        // 播放胜负音效，结束后放结束音乐
+        const audio = new Audio(asset(isVictory ? 'music/shengli.mp3' : 'music/shibai_clip.mp3'));
+        audio.volume = 0.8;
+        audio.play().catch(() => {});
+        audio.addEventListener('ended', () => playEndMusic());
+      };
+      tryShow();
+    }
+
+    // 其余函数保持不变
+    function refreshOpSelect() {
+      if (!currentState) return;
+      const me = currentState.players.find(p => p.id === myPlayerId);
+      if (!me) return;
+      const subOpt = document.getElementById('opSelect').querySelector('option[value="sub"]');
+      const mulOpt = document.getElementById('opSelect').querySelector('option[value="mul"]');
+      const divOpt = document.getElementById('opSelect').querySelector('option[value="div"]');
+      subOpt.disabled = !me.opPool.includes('sub');
+      mulOpt.disabled = !me.opPool.includes('mul');
+      divOpt.disabled = !me.opPool.includes('div');
+      if (opSelect.value === 'sub' && !me.opPool.includes('sub')) opSelect.value = 'add';
+      if (opSelect.value === 'mul' && !me.opPool.includes('mul')) opSelect.value = 'add';
+      if (opSelect.value === 'div' && !me.opPool.includes('div')) opSelect.value = 'add';
+    }
+
+    function updateHandClass(el, player, hand) {
+      el.classList.remove('cut', 'locked', 'can-pay');
+      const cutInfo = player.cutHands.find(c => c.hand === hand);
+      if (cutInfo) {
+        el.classList.add(cutInfo.type === 'cut' ? 'cut' : 'locked');
+        if (cutInfo.type === 'cut' && cutInfo.canPay && player.id === myPlayerId) {
+          el.classList.add('can-pay');
+          el.title = '点击支付1滴血恢复此手';
+        } else {
+          el.title = `状态: ${cutInfo.type==='cut'?'被砍':'被封印'}, 剩余回合: ${cutInfo.turnsLeft}`;
+        }
+      } else {
+        el.title = '';
+      }
+    }
+
+    // 爱心差分渲染：新增的从 scale(0) 长大；减少的播划破动画后移除（错峰）
+    function renderHearts(rowEl, newHp) {
+      const current = rowEl.children.length;
+      if (newHp > current) {
+        for (let i = 0; i < newHp - current; i++) {
+          const h = document.createElement('span');
+          h.className = 'heart';
+          h.textContent = '❤';
+          rowEl.appendChild(h);
+          const idx = i;
+          setTimeout(() => requestAnimationFrame(() => h.classList.add('grown')), idx * 80);
+        }
+      } else if (newHp < current) {
+        const diff = current - newHp;
+        const victims = [];
+        for (let i = 0; i < diff; i++) {
+          victims.push(rowEl.children[current - 1 - i]);
+        }
+        victims.forEach((h, i) => {
+          setTimeout(() => {
+            h.classList.add('slashing');
+            setTimeout(() => h.remove(), 600);
+          }, i * 140);
+        });
+      }
+    }
+
+    function renderShield(rowEl, shieldVal, shieldTurns) {
+      rowEl.innerHTML = '';
+      for (let i = 0; i < shieldVal; i++) {
+        const s = document.createElement('span');
+        s.className = 'shield-icon';
+        s.textContent = '🛡️';
+        rowEl.appendChild(s);
+      }
+      if (shieldVal > 0) {
+        const t = document.createElement('span');
+        t.className = 'shield-turns';
+        t.textContent = `⏳${shieldTurns}`;
+        rowEl.appendChild(t);
+      }
+    }
+
+    function clearSelection() {
+      selectedAttackHand = null;
+      selectedTargetHand = null;
+      document.querySelectorAll('.hand-card').forEach(el => el.classList.remove('selected', 'targeted'));
+    }
+
+    function isHandDisabled(player, hand) {
+      return player.cutHands.some(c => c.hand === hand);
+    }
+    function isHandCut(player, hand) {
+      return player.cutHands.some(c => c.hand === hand && c.type === 'cut');
+    }
+    function isHandOccupied(player, hand) {
+      return player.cutHands.some(c => c.hand === hand);
+    }
+
+    myLeft.addEventListener('click', () => selectOwnHand('left'));
+    myRight.addEventListener('click', () => selectOwnHand('right'));
+    oppLeft.addEventListener('click', () => handleOppHandClick('left'));
+    oppRight.addEventListener('click', () => handleOppHandClick('right'));
+
+    function handleOppHandClick(viewHand) {
+      if (animLocked) return;
+      if (pendingTargetSkillId) {
+        const opp = currentState?.players.find(p => p.id !== myPlayerId);
+        if (!opp) return;
+        const actualHand = flipTargetHand(viewHand);
+        if (isHandOccupied(opp, actualHand)) return;
+        const skillId = pendingTargetSkillId;
+        // 绯红之王：先即时广播特效给双方，快结束时再执行砍手
+        if (skillId === 'single_4') {
+          ws.send(JSON.stringify({ type: 'TRIGGER_EFFECT', skillId: 'single_4', targetHand: actualHand }));
+          exitSkillTargetMode();
+          setTimeout(() => chooseSkill(skillId, actualHand), 2500);
+          return;
+        }
+        exitSkillTargetMode();
+        chooseSkill(skillId, actualHand);
+        return;
+      }
+      selectTargetHand(viewHand);
+    }
+
+    function selectOwnHand(hand) {
+      if (animLocked) return;
+      if (!currentState || currentState.turn !== myPlayerId) return;
+      const me = currentState.players.find(p => p.id === myPlayerId);
+
+      // 血红手牌：点击支付1血恢复
+      const payCut = me.cutHands.find(c => c.hand === hand && c.type === 'cut' && c.canPay);
+      if (payCut) {
+        ws.send(JSON.stringify({ type: 'PAY_CUT', hand }));
+        return;
+      }
+
+      if (isHandDisabled(me, hand)) return;
+      myLeft.classList.remove('selected');
+      myRight.classList.remove('selected');
+      (hand === 'left' ? myLeft : myRight).classList.add('selected');
+      selectedAttackHand = hand;
+    }
+    function selectTargetHand(hand) {
+      if (!currentState || currentState.turn !== myPlayerId) return;
+      const opp = currentState.players.find(p => p.id !== myPlayerId);
+      const realHand = flipTargetHand(hand);
+      if (isHandCut(opp, realHand)) return;
+      oppLeft.classList.remove('targeted');
+      oppRight.classList.remove('targeted');
+      (hand === 'left' ? oppLeft : oppRight).classList.add('targeted');
+      selectedTargetHand = hand;
+    }
+
+    cancelBtn.addEventListener('click', () => { if (animLocked) return; clearSelection(); });
+
+    function performAction(attackHand, targetHandView) {
+      if (!currentState || currentState.turn !== myPlayerId || currentState.phase !== 'playing') return;
+      const me = currentState.players.find(p => p.id === myPlayerId);
+      const opp = currentState.players.find(p => p.id !== myPlayerId);
+      if (!me || !opp) return;
+      if (isHandDisabled(me, attackHand)) { alert('该手无法攻击'); return; }
+      const actualTarget = flipTargetHand(targetHandView);
+      if (isHandCut(opp, actualTarget)) { alert('目标手已被砍'); return; }
+      const op = opSelect.value;
+      if ((op === 'sub' && !me.opPool.includes('sub')) ||
+          (op === 'mul' && !me.opPool.includes('mul')) ||
+          (op === 'div' && !me.opPool.includes('div'))) {
+        alert('没有对应的运算机会');
+        return;
+      }
+      ws.send(JSON.stringify({ type: 'ACT', attackHand, targetHand: actualTarget, operation: op }));
+      clearSelection();
+      opControls.classList.add('hidden');
+    }
+
+    submitBtn.addEventListener('click', () => {
+      if (animLocked) return;
+      if (!selectedAttackHand || !selectedTargetHand) {
+        alert('请选择攻击手和目标手');
+        return;
+      }
+      performAction(selectedAttackHand, selectedTargetHand);
+    });
+
+    // -------- 拖拽碰撞：只能拖自己的手到对方手上 --------
+    myLeft.addEventListener('dragstart', (e) => {
+      if (animLocked) { e.preventDefault(); return; }
+      if (!currentState || currentState.turn !== myPlayerId || skillModal.classList.contains('hidden') === false) {
+        e.preventDefault(); return;
+      }
+      const me = currentState.players.find(p => p.id === myPlayerId);
+      if (isHandDisabled(me, 'left')) { e.preventDefault(); return; }
+      e.dataTransfer.setData('text/plain', 'left');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    myRight.addEventListener('dragstart', (e) => {
+      if (animLocked) { e.preventDefault(); return; }
+      if (!currentState || currentState.turn !== myPlayerId || skillModal.classList.contains('hidden') === false) {
+        e.preventDefault(); return;
+      }
+      const me = currentState.players.find(p => p.id === myPlayerId);
+      if (isHandDisabled(me, 'right')) { e.preventDefault(); return; }
+      e.dataTransfer.setData('text/plain', 'right');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    // 阻止对手手牌被拖动（包括其内部图片）
+    [oppLeft, oppRight].forEach(el => {
+      el.addEventListener('dragstart', (e) => e.preventDefault());
+      el.querySelector('img')?.addEventListener('dragstart', (e) => e.preventDefault());
+    });
+
+    oppLeft.addEventListener('dragover', (e) => { e.preventDefault(); oppLeft.classList.add('drag-over'); });
+    oppLeft.addEventListener('dragleave', () => oppLeft.classList.remove('drag-over'));
+    oppLeft.addEventListener('drop', (e) => {
+      e.preventDefault();
+      oppLeft.classList.remove('drag-over');
+      if (animLocked) return;
+      const attackHand = e.dataTransfer.getData('text/plain');
+      if (!attackHand) return;
+      const opp = currentState?.players.find(p => p.id !== myPlayerId);
+      if (opp && isHandCut(opp, 'right')) return;
+      performAction(attackHand, 'left');
+    });
+    oppRight.addEventListener('dragover', (e) => { e.preventDefault(); oppRight.classList.add('drag-over'); });
+    oppRight.addEventListener('dragleave', () => oppRight.classList.remove('drag-over'));
+    oppRight.addEventListener('drop', (e) => {
+      e.preventDefault();
+      oppRight.classList.remove('drag-over');
+      if (animLocked) return;
+      const attackHand = e.dataTransfer.getData('text/plain');
+      if (!attackHand) return;
+      const opp = currentState?.players.find(p => p.id !== myPlayerId);
+      if (opp && isHandCut(opp, 'left')) return;
+      performAction(attackHand, 'right');
+    });
+
+
+    function showSkillPanel(options) {
+      skillOptionsDiv.innerHTML = '';
+      options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.textContent = opt.description;
+        btn.addEventListener('click', () => {
+          if (animLocked) return;
+          if (opt.needsTarget) {
+            enterSkillTargetMode(opt.id);
+          } else {
+            chooseSkill(opt.id);
+          }
+        });
+        skillOptionsDiv.appendChild(btn);
+      });
+      skillModal.classList.remove('hidden');
+      opControls.classList.add('hidden');
+    }
+
+    function chooseSkill(skillId, targetHand = null) {
+      ws.send(JSON.stringify({ type: 'SKILL_CHOICE', skillId, targetHand }));
+      skillModal.classList.add('hidden');
+      exitSkillTargetMode();
+    }
+
+    function enterSkillTargetMode(skillId, autoFireDesc = null) {
+      pendingTargetSkillId = skillId;
+      skillModal.classList.add('hidden');
+      skillTargetHint.classList.remove('hidden');
+      skillTargetHintText.textContent = autoFireDesc
+        ? `⚡ ${autoFireDesc} 已发动！请选择目标手`
+        : '⚡ 请点击对方一只可选手作为目标';
+      // 自动发动模式下不允许跳过
+      cancelSkillTargetBtn.classList.toggle('hidden', !!autoFireDesc);
+      const opp = currentState?.players.find(p => p.id !== myPlayerId);
+      if (!opp) return;
+      // UI 中 oppLeft 显示对方右手，oppRight 显示对方左手
+      if (!isHandOccupied(opp, 'right')) oppLeft.classList.add('skill-target');
+      if (!isHandOccupied(opp, 'left')) oppRight.classList.add('skill-target');
+    }
+
+    function exitSkillTargetMode() {
+      pendingTargetSkillId = null;
+      skillTargetHint.classList.add('hidden');
+      cancelSkillTargetBtn.classList.remove('hidden');
+      oppLeft.classList.remove('skill-target');
+      oppRight.classList.remove('skill-target');
+    }
+
+    // ==================== 音效引擎 ====================
+    let sfxCtx;
+    try { sfxCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+    let sealSelectBuffer = null;
+    let seyoushuBuffer = null;
+    let hougongshuBuffer = null;
+    let cfshouleiBuffer = null;
+    let oulaBuffer = null;
+    // 预解码音效，实现零延迟播放
+    (async () => {
+      if (!sfxCtx) return;
+      const preload = async (url) => {
+        try {
+          const resp = await fetch(url);
+          const arrayBuf = await resp.arrayBuffer();
+          return await sfxCtx.decodeAudioData(arrayBuf);
+        } catch(e) { return null; }
+      };
+      sealSelectBuffer = await preload(asset('music/seal_select.mp3'));
+      seyoushuBuffer = await preload(asset('music/seyoushu_clip.mp3'));
+      hougongshuBuffer = await preload(asset('music/hougongshu_clip.mp3'));
+      cfshouleiBuffer = await preload(asset('music/cfshoulei_clip.mp3'));
+      oulaBuffer = await preload(asset('music/oula_clip.mp3'));
+    })();
+    function sfxNoise(dur, envFn, filterType, freq, gain) {
+      if (!sfxCtx) return;
+      const sr = sfxCtx.sampleRate;
+      const len = Math.floor(sr * dur);
+      const buf = sfxCtx.createBuffer(1, len, sr);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * envFn(i / sr, i, len);
+      const src = sfxCtx.createBufferSource(); src.buffer = buf;
+      const g = sfxCtx.createGain(); g.gain.setValueAtTime(gain, sfxCtx.currentTime);
+      if (filterType) {
+        const f = sfxCtx.createBiquadFilter(); f.type = filterType;
+        f.frequency.setValueAtTime(freq, sfxCtx.currentTime);
+        src.connect(f).connect(g).connect(sfxCtx.destination);
+      } else {
+        src.connect(g).connect(sfxCtx.destination);
+      }
+      src.start(sfxCtx.currentTime);
+    }
+    function sfxOsc(type, freqStart, freqEnd, dur, gain) {
+      if (!sfxCtx) return;
+      const now = sfxCtx.currentTime;
+      const o = sfxCtx.createOscillator(); o.type = type;
+      o.frequency.setValueAtTime(freqStart, now);
+      if (freqEnd) o.frequency.exponentialRampToValueAtTime(Math.max(freqEnd, 1), now + dur);
+      const g = sfxCtx.createGain();
+      g.gain.setValueAtTime(gain, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      o.connect(g).connect(sfxCtx.destination);
+      o.start(now); o.stop(now + dur);
+    }
+
+    // ---- 音效库 ----
+    function sfxHit() {
+      sfxOsc('triangle', 120, 25, 0.1, 0.5);
+      sfxNoise(0.06, t => Math.pow(1 - t / 0.06, 2), 'lowpass', 2000, 0.3);
+    }
+    function sfxSlap() {
+      // 清脆拍击声
+      sfxNoise(0.05, t => Math.exp(-t * 60) * 0.7, 'highpass', 4000, 0.5);
+      sfxOsc('sine', 2000, 400, 0.06, 0.2);
+      sfxOsc('triangle', 600, 200, 0.04, 0.25);
+    }
+    function sfxCheer() {
+      // 欢呼/喝彩声
+      ['C4','E4','G4','C5'].forEach((note, i) => {
+        const freq = {C4:262,E4:330,G4:392,C5:523}[note];
+        sfxOsc('sawtooth', freq, freq * 1.02, 0.12, 0.3 + i * 0.08);
+      });
+      sfxNoise(0.3, t => Math.exp(-t * 8) * 0.2, 'bandpass', 3000, 0.15);
+    }
+    function sfxRpsSelect() {
+      sfxOsc('sine', 600, 900, 0.1, 0.08);
+    }
+    function sfxRpsTie() {
+      sfxOsc('triangle', 330, 300, 0.15, 0.25);
+      sfxOsc('triangle', 330, 300, 0.12, 0.35);
+    }
+    function sfxRpsWin() {
+      ['C5','E5','G5'].forEach((n, i) => {
+        const f = {C5:523,E5:659,G5:784}[n];
+        sfxOsc('sine', f, f, 0.12, 0.1 + i * 0.1);
+      });
+    }
+    function sfxRpsLose() {
+      sfxOsc('triangle', 300, 200, 0.15, 0.3);
+      sfxOsc('triangle', 250, 180, 0.12, 0.25);
+    }
+    function sfxHandConfirm() {
+      sfxOsc('sine', 500, 700, 0.08, 0.1);
+    }
+
+    function sfxSlash() {
+      sfxNoise(0.2, t => Math.exp(-t * 20) * 0.5, 'bandpass', 4000, 0.6);
+      sfxOsc('sawtooth', 800, 200, 0.15, 0.2);
+    }
+    function sfxHeal() {
+      sfxOsc('sine', 880, 1760, 0.3, 0.25);
+      sfxOsc('sine', 660, 1320, 0.25, 0.2);
+      sfxOsc('sine', 440, 880, 0.2, 0.15);
+    }
+    function sfxHealAudio() {
+      if (healAudio) {
+        healAudio.volume = 0.7;
+        healAudio.currentTime = 0;
+        healAudio.play().catch(() => sfxHeal());
+      } else {
+        sfxHeal();
+      }
+    }
+    function sfxHitAudio() {
+      if (hitAudioEl) {
+        hitAudioEl.volume = 0.7;
+        hitAudioEl.currentTime = 0;
+        hitAudioEl.play().catch(() => sfxHit());
+      } else {
+        sfxHit();
+      }
+    }
+    function sfxWineAudio() {
+      if (wineAudio) {
+        wineAudio.volume = 0.8;
+        wineAudio.currentTime = 0;
+        wineAudio.play().catch(() => sfxRevive());
+      } else {
+        sfxRevive();
+      }
+    }
+    function playBufferSound(buffer, volume, fallbackAudio, fallbackFn) {
+      if (sfxCtx && buffer) {
+        if (sfxCtx.state === 'suspended') sfxCtx.resume();
+        const src = sfxCtx.createBufferSource();
+        src.buffer = buffer;
+        const g = sfxCtx.createGain();
+        g.gain.setValueAtTime(volume, sfxCtx.currentTime);
+        src.connect(g).connect(sfxCtx.destination);
+        src.start(sfxCtx.currentTime);
+        return;
+      }
+      if (fallbackAudio) {
+        fallbackAudio.volume = volume;
+        fallbackAudio.currentTime = 0;
+        fallbackAudio.play().catch(() => { if (fallbackFn) fallbackFn(); });
+      } else if (fallbackFn) {
+        fallbackFn();
+      }
+    }
+    function sfxSealSelect() {
+      playBufferSound(sealSelectBuffer, 0.8, sealSelectAudio, sfxSeal);
+    }
+    function sfxSeyoushu() {
+      playBufferSound(seyoushuBuffer, 0.75, seyoushuAudio, sfxHeal);
+    }
+    function sfxHougongshu() {
+      playBufferSound(hougongshuBuffer, 0.75, hougongshuAudio, sfxHit);
+    }
+    function sfxCfshoulei() {
+      playBufferSound(cfshouleiBuffer, 0.8, cfshouleiAudio, sfxExplosion);
+    }
+    function sfxOula() {
+      playBufferSound(oulaBuffer, 0.8, oulaAudio, sfxPunch);
+    }
+    function sfxWaterDrink() {
+      // 水滴声 + 喝水声
+      if (!sfxCtx) return;
+      const sr = sfxCtx.sampleRate, dur = 0.9, len = Math.floor(sr * dur);
+      const buf = sfxCtx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) {
+        const t = i / sr;
+        // 水滴落入水面: 短促高频 tone + noise 混合
+        const drop = Math.sin(2 * Math.PI * 1200 * t) * Math.exp(-t * 20) * 0.35;
+        const drop2 = Math.sin(2 * Math.PI * 800 * (t - 0.15)) * Math.exp(-(t - 0.15) * 25) * 0.25 * (t > 0.15 ? 1 : 0);
+        // 咕噜喝水声: 低频气泡音
+        const gulp = Math.sin(2 * Math.PI * 200 * t * (1 + 0.3 * Math.sin(t * 15))) * Math.exp(-t * 4) * 0.3;
+        const noise = (Math.random() * 2 - 1) * Math.exp(-t * 12) * 0.15;
+        d[i] = Math.max(-1, Math.min(1, drop + drop2 + gulp + noise));
+      }
+      const src = sfxCtx.createBufferSource(); src.buffer = buf;
+      const g = sfxCtx.createGain(); g.gain.setValueAtTime(0.7, sfxCtx.currentTime);
+      src.connect(g).connect(sfxCtx.destination);
+      src.start(sfxCtx.currentTime);
+    }
+    function sfxShield() {
+      sfxOsc('sine', 200, 500, 0.4, 0.35);
+      sfxNoise(0.2, t => Math.exp(-t * 12) * 0.2, 'lowpass', 800, 0.2);
+    }
+    function sfxPunch() {
+      sfxOsc('triangle', 100, 20, 0.12, 0.55);
+      sfxNoise(0.07, t => Math.pow(1 - t / 0.07, 2.5), 'lowpass', 1500, 0.35);
+    }
+    function sfxGun() {
+      if (!sfxCtx) return;
+      const sr = sfxCtx.sampleRate, dur = 0.5, len = Math.floor(sr * dur);
+      const buf = sfxCtx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+      let brown = 0;
+      for (let i = 0; i < len; i++) {
+        const t = i / sr;
+        brown += (Math.random() * 2 - 1) * 0.3;
+        brown = Math.max(-1, Math.min(1, brown));
+        d[i] = (brown * 0.85 + (Math.random() * 2 - 1) * 0.15) * (Math.exp(-t * 18) * 0.85 + Math.exp(-t * 80) * 0.15);
+      }
+      for (let i = 0; i < Math.floor(sr * 0.3); i++) {
+        const t = i / sr;
+        d[i] += Math.sin(2 * Math.PI * 60 * t - Math.PI * 0.5) * Math.exp(-t * 25) * 0.5;
+      }
+      for (let i = 0; i < len; i++) d[i] = Math.max(-1, Math.min(1, d[i] * 1.3));
+      const src = sfxCtx.createBufferSource(); src.buffer = buf;
+      const g = sfxCtx.createGain(); g.gain.setValueAtTime(0.9, sfxCtx.currentTime);
+      src.connect(g).connect(sfxCtx.destination);
+      src.start(sfxCtx.currentTime);
+    }
+    function sfxExplosion() {
+      sfxGun();
+      sfxOsc('sawtooth', 60, 10, 0.5, 0.4);
+      sfxNoise(0.3, t => Math.exp(-t * 8) * 0.7, 'lowpass', 600, 0.5);
+    }
+    function sfxBow() {
+      sfxNoise(0.08, t => Math.exp(-t * 40) * 0.5, 'highpass', 3000, 0.4);
+      sfxOsc('sine', 300, 100, 0.2, 0.3);
+    }
+    function sfxSeal() {
+      sfxOsc('triangle', 400, 100, 0.3, 0.35);
+      sfxOsc('sine', 80, 40, 0.4, 0.3);
+    }
+    function sfxPeace() {
+      sfxOsc('sine', 528, 528, 0.8, 0.4);
+      sfxOsc('sine', 660, 660, 0.6, 0.3);
+      sfxOsc('sine', 792, 792, 0.5, 0.25);
+    }
+    function sfxPowerUp() {
+      const steps = [200, 300, 450, 600, 800];
+      steps.forEach((f, i) => sfxOsc('sine', f, f * 1.1, 0.15 + i * 0.05, 0.18));
+      sfxNoise(0.5, t => Math.exp(-t * 6) * 0.25, 'bandpass', 2000, 0.2);
+    }
+    function sfxRevive() {
+      sfxOsc('sine', 523, 1047, 0.6, 0.35);
+      sfxOsc('sine', 659, 1319, 0.5, 0.3);
+      sfxOsc('sine', 784, 1568, 0.4, 0.25);
+    }
+    function sfxKingCrimson() {
+      if (!sfxCtx) return;
+      const sr = sfxCtx.sampleRate, dur = 1.2, len = Math.floor(sr * dur);
+      const buf = sfxCtx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+      // Deep bass rumble + time-skip glitch
+      for (let i = 0; i < len; i++) {
+        const t = i / sr;
+        // Deep sub-bass hit ~50Hz, decaying
+        const bass = Math.sin(2 * Math.PI * 50 * t) * Math.exp(-t * 4) * 0.6;
+        // Second deeper bass ~30Hz
+        const bass2 = Math.sin(2 * Math.PI * 30 * t + 0.3) * Math.exp(-t * 3) * 0.5;
+        // Time-skip glitch: frequency sweep from high to low
+        const glitchFreq = 800 * Math.exp(-t * 8) + 40;
+        const glitch = Math.sin(2 * Math.PI * glitchFreq * t * (1 + 0.5 * Math.sin(t * 30))) * Math.exp(-t * 5) * 0.2;
+        // Brown noise rumble
+        const noise = (Math.random() * 2 - 1) * Math.exp(-t * 7) * 0.25;
+        d[i] = Math.max(-1, Math.min(1, bass + bass2 + glitch + noise));
+      }
+      const src = sfxCtx.createBufferSource(); src.buffer = buf;
+      const g = sfxCtx.createGain(); g.gain.setValueAtTime(0.8, sfxCtx.currentTime);
+      const f = sfxCtx.createBiquadFilter(); f.type = 'lowpass';
+      f.frequency.setValueAtTime(500, sfxCtx.currentTime);
+      f.frequency.exponentialRampToValueAtTime(80, sfxCtx.currentTime + 0.8);
+      src.connect(f).connect(g).connect(sfxCtx.destination);
+      src.start(sfxCtx.currentTime);
+      // Extra whoosh after the bass
+      sfxNoise(0.5, t => Math.exp(-t * 10) * 0.4, 'bandpass', 3000, 0.3);
+    }
+    // 仙人模式音效：优先播放 naruto_sage.mp3，没有则合成
+    let sageAudio = null;
+    function sfxSageMode() {
+      if (sageAudio === null) {
+        sageAudio = new Audio(asset('music/naruto_sage.mp3'));
+        sageAudio.volume = 0.7;
+        sageAudio.onerror = () => { sageAudio = false; };
+      }
+      if (sageAudio) {
+        sageAudio.currentTime = 0;
+        sageAudio.play().catch(() => { sageAudio = false; sfxPowerUp(); });
+      } else {
+        sfxPowerUp();
+      }
+    }
+
+    // ---- 视觉特效 ----
+    function fxShakeTarget(casterId) {
+      const av = casterId === myPlayerId ? oppAvatar : myAvatarImg;
+      av.classList.remove('shaking'); void av.offsetWidth; av.classList.add('shaking');
+    }
+    function fxShakeSelf(casterId) {
+      const av = casterId === myPlayerId ? myAvatarImg : oppAvatar;
+      av.classList.remove('shaking'); void av.offsetWidth; av.classList.add('shaking');
+    }
+    function fxHealGlow(casterId) {
+      const av = casterId === myPlayerId ? myAvatarImg : oppAvatar;
+      av.classList.remove('heal-glow'); void av.offsetWidth; av.classList.add('heal-glow');
+    }
+    function fxWaterDropAnim(casterId) {
+      const av = casterId === myPlayerId ? myAvatarImg : oppAvatar;
+      const ar = av.getBoundingClientRect();
+      const cx = ar.left + ar.width / 2;
+      const topY = ar.top - 60;
+      const bottomY = ar.top;
+      // 水滴起始位置（头像正上方）
+      fxWaterDrop.style.transition = 'none';
+      fxWaterDrop.style.transform = '';
+      fxWaterDrop.style.top = topY + 'px';
+      fxWaterDrop.style.left = (cx - 11) + 'px';
+      fxWaterDrop.style.opacity = '1';
+      // 下落
+      requestAnimationFrame(() => {
+        fxWaterDrop.style.transition = 'top 0.5s ease-in, opacity 0.15s ease-out 0.45s';
+        fxWaterDrop.style.top = bottomY + 'px';
+      });
+      // 溅开水花粒子
+      setTimeout(() => {
+        fxWaterDrop.style.opacity = '0';
+        for (let i = 0; i < 6; i++) {
+          const particle = document.createElement('div');
+          particle.className = 'water-splash';
+          particle.style.top = bottomY + 'px';
+          particle.style.left = cx + 'px';
+          const angle = (Math.PI * 2 * i) / 6;
+          const dist = 15 + Math.random() * 20;
+          particle.style.setProperty('--sx', Math.cos(angle) * dist + 'px');
+          particle.style.setProperty('--sy', Math.sin(angle) * dist + 'px');
+          document.body.appendChild(particle);
+          requestAnimationFrame(() => particle.classList.add('burst'));
+          setTimeout(() => particle.remove(), 600);
+        }
+      }, 500);
+    }
+    function fxHealGlowTarget(casterId) {
+      const av = casterId === myPlayerId ? oppAvatar : myAvatarImg;
+      av.classList.remove('heal-glow'); void av.offsetWidth; av.classList.add('heal-glow');
+    }
+    function fxShieldUp(casterId) {
+      const av = casterId === myPlayerId ? myAvatarImg : oppAvatar;
+      const sfx = casterId === myPlayerId ? myShieldFx : oppShieldFx;
+      av.classList.remove('shield-up'); void av.offsetWidth; av.classList.add('shield-up');
+      // 大护盾展开动画
+      sfx.classList.remove('deploy'); void sfx.offsetWidth; sfx.classList.add('deploy');
+    }
+    function fxSageAura(casterId) {
+      const av = casterId === myPlayerId ? myAvatarImg : oppAvatar;
+      av.classList.remove('sage-aura'); void av.offsetWidth; av.classList.add('sage-aura');
+    }
+    function fxReviveGlow(casterId) {
+      const av = casterId === myPlayerId ? myAvatarImg : oppAvatar;
+      av.classList.remove('revive-glow'); void av.offsetWidth; av.classList.add('revive-glow');
+    }
+    function fxSealLock(casterId) {
+      const av = casterId === myPlayerId ? oppAvatar : myAvatarImg;
+      av.classList.remove('seal-lock'); void av.offsetWidth; av.classList.add('seal-lock');
+    }
+    function fxSlashEffect() {
+      fxSlash.classList.remove('active'); void fxSlash.offsetWidth; fxSlash.classList.add('active');
+    }
+    function fxScreenShake() {
+      appContainer.classList.remove('screen-shake'); void appContainer.offsetWidth; appContainer.classList.add('screen-shake');
+    }
+    function fxScreenWhite() {
+      fxScreenFlash.classList.remove('active'); void fxScreenFlash.offsetWidth; fxScreenFlash.classList.add('active');
+    }
+    function fxPeaceGlow() {
+      fxPeace.classList.remove('active'); void fxPeace.offsetWidth; fxPeace.classList.add('active');
+    }
+    function fxKingCrimsonEffect() {
+      // 绯红之王时间删除：全屏猩红 + 负片闪现 + 屏幕震荡
+      fxKingCrimson.classList.remove('active'); void fxKingCrimson.offsetWidth; fxKingCrimson.classList.add('active');
+      setTimeout(() => {
+        fxKCNegative.classList.remove('active'); void fxKCNegative.offsetWidth; fxKCNegative.classList.add('active');
+        appContainer.classList.remove('screen-shake'); void appContainer.offsetWidth; appContainer.classList.add('screen-shake');
+      }, 200);
+      setTimeout(() => {
+        fxKCNegative.classList.remove('active'); void fxKCNegative.offsetWidth; fxKCNegative.classList.add('active');
+        appContainer.classList.remove('screen-shake'); void appContainer.offsetWidth; appContainer.classList.add('screen-shake');
+      }, 600);
+    }
+    function playKingCrimsonLocal() {
+      let videoPlayed = false;
+      let audioPlayed = false;
+
+      if (kcVideo && kcCanvas) {
+        const ctx = kcCanvas.getContext('2d');
+        // 全屏显示，半分辨率内部处理（省性能）
+        const scale = 0.5;
+        const dw = window.innerWidth;
+        const dh = window.innerHeight;
+        const w = Math.floor(dw * scale);
+        const h = Math.floor(dh * scale);
+        kcCanvas.width = w;
+        kcCanvas.height = h;
+        kcCanvas.style.top = '0';
+        kcCanvas.style.left = '0';
+        kcCanvas.style.width = dw + 'px';
+        kcCanvas.style.height = dh + 'px';
+        kcCanvas.style.display = '';
+
+        function drawFrame() {
+          if (kcVideo.paused || kcVideo.ended) {
+            kcCanvas.style.display = 'none';
+            return;
+          }
+          // 画视频帧
+          ctx.drawImage(kcVideo, 0, 0, w, h);
+          // 抠黑底：接近黑色的像素→透明
+          const frame = ctx.getImageData(0, 0, w, h);
+          const d = frame.data;
+          for (let i = 0; i < d.length; i += 4) {
+            if (d[i] < 25 && d[i + 1] < 25 && d[i + 2] < 25) {
+              d[i + 3] = 0;
+            }
+          }
+          ctx.putImageData(frame, 0, 0);
+          kcAnimId = requestAnimationFrame(drawFrame);
+        }
+
+        kcVideo.currentTime = 0;
+        kcVideo.play().then(() => {
+          videoPlayed = true;
+          drawFrame();
+        }).catch(() => {});
+        kcVideo.onended = () => {
+          cancelAnimationFrame(kcAnimId);
+          kcCanvas.style.display = 'none';
+        };
+        kcVideo.onerror = () => {
+          kcCanvas.style.display = 'none';
+        };
+        // 兜底：3s 后强制隐藏
+        setTimeout(() => {
+          cancelAnimationFrame(kcAnimId);
+          kcCanvas.style.display = 'none';
+        }, 3000);
+      }
+
+      // 播放 mp3 音效
+      if (kcAudio) {
+        kcAudio.volume = 0.8;
+        kcAudio.currentTime = 0;
+        kcAudio.play().then(() => { audioPlayed = true; }).catch(() => {});
+      }
+
+      // 视频失败 → CSS 猩红效果兜底
+      if (kcVideo) {
+        setTimeout(() => { if (!videoPlayed) fxKingCrimsonEffect(); }, 300);
+      } else {
+        fxKingCrimsonEffect();
+      }
+      // 音效失败 → 合成音效兜底
+      setTimeout(() => { if (!audioPlayed) sfxKingCrimson(); }, 200);
+    }
+    function fxBigTextShow(text, color) {
+      fxBigText.textContent = text;
+      fxBigText.style.color = color;
+      fxBigText.classList.remove('active'); void fxBigText.offsetWidth; fxBigText.classList.add('active');
+    }
+    function fxIntelLaser(casterId) {
+      const isMe = casterId === myPlayerId;
+      const leftSrc = isMe ? getHandImageSrc(true, 'left', 2) : getHandImageSrc(false, 'right', 2);
+      const rightSrc = isMe ? getHandImageSrc(true, 'right', 2) : getHandImageSrc(false, 'left', 2);
+      const avatar = isMe ? myAvatarImg : oppAvatar;
+      const leftCard = isMe ? myLeft : oppLeft;
+      const rightCard = isMe ? myRight : oppRight;
+
+      // 手牌原图暂时半透明
+      leftCard.style.opacity = '0.25';
+      rightCard.style.opacity = '0.25';
+
+      const lr = leftCard.getBoundingClientRect();
+      const rr = rightCard.getBoundingClientRect();
+      const ar = avatar.getBoundingClientRect();
+      const avCX = ar.left + ar.width / 2;
+      const avCY = ar.top + ar.height / 2;
+
+      // 目标位置：自己视角在头像下方，敌方视角在头像上方
+      const targetLX = avCX - ar.width * 1.2;
+      const targetRX = avCX + ar.width * 1.2 - 90;
+      const targetY = isMe ? ar.bottom + 40 : ar.top - 130;
+
+      // 对手的手图需要180°反转（匹配游戏内反转显示）
+      const extraTransform = isMe ? '' : ' rotate(180deg)';
+
+      // 初始化飞出的手图
+      [fxIntelHandL, fxIntelHandR].forEach(el => { el.style.display = ''; el.style.transition = 'none'; });
+      fxIntelHandL.src = leftSrc;
+      fxIntelHandR.src = rightSrc;
+      fxIntelHandL.style.top = (lr.top + lr.height / 2 - 57) + 'px';
+      fxIntelHandL.style.left = (lr.left + lr.width / 2 - 45) + 'px';
+      fxIntelHandR.style.top = (rr.top + rr.height / 2 - 57) + 'px';
+      fxIntelHandR.style.left = (rr.left + rr.width / 2 - 45) + 'px';
+      fxIntelHandL.style.transform = 'scale(0.8)' + extraTransform;
+      fxIntelHandR.style.transform = 'scale(0.8)' + extraTransform;
+
+      // 1. 飞出到头像两侧
+      requestAnimationFrame(() => {
+        fxIntelHandL.style.transition = 'all 0.55s ease-out';
+        fxIntelHandR.style.transition = 'all 0.55s ease-out';
+        fxIntelHandL.style.top = targetY + 'px';
+        fxIntelHandL.style.left = targetLX + 'px';
+        fxIntelHandL.style.transform = 'scale(0.9)' + extraTransform;
+        fxIntelHandR.style.top = targetY + 'px';
+        fxIntelHandR.style.left = targetRX + 'px';
+        fxIntelHandR.style.transform = 'scale(0.9)' + extraTransform;
+      });
+
+      // 2. 发射双激光 1.5s（精确指向头像中心）
+      setTimeout(() => {
+        const flr = fxIntelHandL.getBoundingClientRect();
+        const frr = fxIntelHandR.getBoundingClientRect();
+        const tipLX = flr.left + flr.width / 2;
+        const tipLY = isMe ? flr.top : (flr.top + flr.height * 0.75);
+        const tipRX = frr.left + frr.width / 2;
+        const tipRY = isMe ? frr.top : (frr.top + frr.height * 0.75);
+
+        [fxLaserL, fxLaserR].forEach(el => {
+          el.style.opacity = '0';
+          el.style.transformOrigin = 'left center';
+        });
+
+        const dxL = avCX - tipLX, dyL = avCY - tipLY;
+        const distL = Math.hypot(dxL, dyL);
+        fxLaserL.style.top = tipLY + 'px';
+        fxLaserL.style.left = tipLX + 'px';
+        fxLaserL.style.width = distL + 'px';
+        fxLaserL.style.height = '3px';
+        fxLaserL.style.transform = `rotate(${Math.atan2(dyL, dxL) * 180 / Math.PI}deg)`;
+        fxLaserL.classList.add('on');
+        void fxLaserL.offsetWidth; fxLaserL.style.opacity = '1';
+
+        const dxR = avCX - tipRX, dyR = avCY - tipRY;
+        const distR = Math.hypot(dxR, dyR);
+        fxLaserR.style.top = tipRY + 'px';
+        fxLaserR.style.left = tipRX + 'px';
+        fxLaserR.style.width = distR + 'px';
+        fxLaserR.style.height = '3px';
+        fxLaserR.style.transform = `rotate(${Math.atan2(dyR, dxR) * 180 / Math.PI}deg)`;
+        fxLaserR.classList.add('on');
+        void fxLaserR.offsetWidth; fxLaserR.style.opacity = '1';
+      }, 700);
+
+      // 3. 显示智力增加结果
+      setTimeout(() => {
+        const opPool = currentState?.players.find(p => p.id === casterId)?.opPool;
+        const lastOp = opPool && opPool.length > 0 ? opPool[opPool.length - 1] : '';
+        const opNames = { sub: '减法', mul: '乘法', div: '除法' };
+        fxBigTextShow(opNames[lastOp] ? `🧠 智力增加·${opNames[lastOp]}` : '🧠 智力增加！', '#00ccff');
+      }, 1000);
+
+      // 4. 激光关闭，手图飞回
+      setTimeout(() => {
+        fxLaserL.classList.remove('on');
+        fxLaserR.classList.remove('on');
+        fxLaserL.style.opacity = '0';
+        fxLaserR.style.opacity = '0';
+
+        fxIntelHandL.style.transition = 'all 0.5s ease-in';
+        fxIntelHandR.style.transition = 'all 0.5s ease-in';
+        fxIntelHandL.style.top = (lr.top + lr.height / 2 - 57) + 'px';
+        fxIntelHandL.style.left = (lr.left + lr.width / 2 - 45) + 'px';
+        fxIntelHandL.style.transform = 'scale(0.8)' + extraTransform;
+        fxIntelHandR.style.top = (rr.top + rr.height / 2 - 57) + 'px';
+        fxIntelHandR.style.left = (rr.left + rr.width / 2 - 45) + 'px';
+        fxIntelHandR.style.transform = 'scale(0.8)' + extraTransform;
+      }, 2100);
+
+      // 5. 清理，恢复原手牌
+      setTimeout(() => {
+        fxIntelHandL.style.display = 'none';
+        fxIntelHandR.style.display = 'none';
+        leftCard.style.opacity = '';
+        rightCard.style.opacity = '';
+      }, 2700);
+    }
+
+    function fxNarutoFlash(casterId) {
+      if (!fxNaruto || fxNaruto.style.display === 'none') {
+        fxBigTextShow('🍥 仙人模式', '#ff8c00');
+        return;
+      }
+      const panel = casterId === myPlayerId
+        ? document.getElementById('myInfoPanel')
+        : document.getElementById('oppArea');
+      const r = panel.getBoundingClientRect();
+      fxNaruto.style.top = (r.top + r.height / 2) + 'px';
+      fxNaruto.style.left = (r.right + 24) + 'px';
+      fxNaruto.classList.remove('show'); void fxNaruto.offsetWidth; fxNaruto.classList.add('show');
+    }
+    function fxBowVolley(casterId, count) {
+      const casterAv = casterId === myPlayerId ? myAvatarImg : oppAvatar;
+      const targetAv = casterId === myPlayerId ? oppAvatar : myAvatarImg;
+      const fromR = casterAv.getBoundingClientRect();
+      const toR = targetAv.getBoundingClientRect();
+
+      const fromX = fromR.left + fromR.width / 2;
+      const fromY = fromR.top + fromR.height / 2;
+      const toX = toR.left + toR.width / 2;
+      const toY = toR.top + toR.height / 2;
+
+      // 清理之前的箭
+      volleyArrows.forEach(a => {
+        a.style.opacity = '0';
+        a.style.transition = 'none';
+        a.classList.remove('stuck');
+      });
+
+      // 弓出现在施法者头像处，拉弓动画
+      fxBow.style.opacity = '';
+      fxBow.style.left = fromX + 'px';
+      fxBow.style.top = fromY + 'px';
+      fxBow.classList.remove('draw'); void fxBow.offsetWidth; fxBow.classList.add('draw');
+
+      // 依次射箭
+      for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+          const arrow = volleyArrows[i];
+          if (!arrow) return;
+          // 箭从弓的位置出发，带点偏移
+          const offsetX = (i - (count - 1) / 2) * 14;
+          arrow.style.left = fromX + 'px';
+          arrow.style.top = fromY + 'px';
+          arrow.style.opacity = '1';
+          arrow.style.transition = 'none';
+          arrow.style.transform = 'translate(-50%, -50%) rotate(-30deg) scale(0.7)';
+          arrow.classList.remove('stuck');
+          void arrow.offsetWidth;
+
+          // 飞向目标
+          arrow.style.transition = 'left 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), top 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+          arrow.style.left = (toX + offsetX) + 'px';
+          arrow.style.top = toY + 'px';
+          arrow.style.transform = 'translate(-50%, -50%) rotate(0deg) scale(1)';
+
+          // 箭到达后插在头像上，然后脱落
+          const onArrive = () => {
+            arrow.removeEventListener('transitionend', onArrive);
+            arrow.style.transition = 'none';
+            arrow.classList.add('stuck');
+            // 动画结束后隐藏
+            setTimeout(() => { arrow.style.opacity = '0'; arrow.classList.remove('stuck'); }, 850);
+          };
+          arrow.addEventListener('transitionend', onArrive);
+        }, 250 + i * 150);
+      }
+
+      // 收弓
+      setTimeout(() => {
+        fxBow.classList.remove('draw');
+        fxBow.style.opacity = '0';
+      }, 800);
+
+      // 箭到达时同步触发受击音效和震动（第一支箭到达 ≈ 250ms延迟 + 400ms飞行）
+      setTimeout(() => {
+        sfxHitAudio();
+        fxShakeTarget(casterId);
+        if (count >= 2) fxScreenShake();
+      }, 650);
+    }
+
+    function fxPunchTarget(casterId) {
+      const targetAv = casterId === myPlayerId ? oppAvatar : myAvatarImg;
+      const r = targetAv.getBoundingClientRect();
+      fxPunch.style.top = (r.top + r.height / 2) + 'px';
+      fxPunch.style.left = (r.left + r.width / 2) + 'px';
+      fxPunch.classList.remove('smash'); void fxPunch.offsetWidth; fxPunch.classList.add('smash');
+    }
+
+    function fxClockOnHand(handEl) {
+      const r = handEl.getBoundingClientRect();
+      fxClock.style.left = (r.left + r.width / 2) + 'px';
+      fxClock.style.top = (r.top + r.height / 2) + 'px';
+      fxClock.classList.remove('tick'); void fxClock.offsetWidth; fxClock.classList.add('tick');
+    }
+
+    function fxHeartsRain() {
+      const count = 28;
+      const hearts = [];
+      for (let i = 0; i < count; i++) {
+        const heart = document.createElement('div');
+        heart.textContent = '❤️';
+        const size = 14 + Math.random() * 30;
+        const startX = Math.random() * 100;
+        const startY = 95 + Math.random() * 15;
+        const dur = 1.6 + Math.random() * 1.8;
+        const delay = Math.random() * 0.6;
+        heart.style.cssText = `
+          position: fixed; z-index: 350; pointer-events: none;
+          font-size: ${size}px;
+          left: ${startX}vw;
+          top: ${startY}vh;
+          opacity: 0;
+          animation: heartFloat ${dur}s ease-out ${delay}s forwards;
+        `;
+        document.body.appendChild(heart);
+        hearts.push(heart);
+      }
+      setTimeout(() => hearts.forEach(h => h.remove()), 3500);
+    }
+
+    function fxThrowGrenade(casterId) {
+      const casterAv = casterId === myPlayerId ? myAvatarImg : oppAvatar;
+      const targetAv = casterId === myPlayerId ? oppAvatar : myAvatarImg;
+
+      // 延迟 0.4s 开始投掷
+      setTimeout(() => {
+        const fromR = casterAv.getBoundingClientRect();
+        const toR = targetAv.getBoundingClientRect();
+        const fromX = fromR.left + fromR.width / 2;
+        const fromY = fromR.top + fromR.height / 2;
+        const toX = toR.left + toR.width / 2;
+        const toY = toR.top + toR.height / 2;
+        const midX = (fromX + toX) / 2;
+        const midY = Math.min(fromY, toY) - 60;
+
+        // 手雷出现在施法者头像处
+        fxGrenade.style.left = fromX + 'px';
+        fxGrenade.style.top = fromY + 'px';
+        fxGrenade.style.opacity = '1';
+        fxGrenade.style.transform = 'translate(-50%, -50%) rotate(0deg) scale(1)';
+        fxGrenade.style.transition = 'none';
+        void fxGrenade.offsetWidth;
+
+        // 第一段：飞向中点（上升弧线 + 旋转）
+        fxGrenade.style.transition = 'left 0.35s ease-out, top 0.35s ease-out, transform 0.35s linear, opacity 0.35s';
+        fxGrenade.style.left = midX + 'px';
+        fxGrenade.style.top = midY + 'px';
+        fxGrenade.style.transform = 'translate(-50%, -50%) rotate(360deg) scale(1.1)';
+
+        setTimeout(() => {
+          // 第二段：飞向目标（下落 + 继续旋转）
+          fxGrenade.style.transition = 'left 0.35s ease-in, top 0.35s ease-in, transform 0.35s linear, opacity 0.35s';
+          fxGrenade.style.left = toX + 'px';
+          fxGrenade.style.top = toY + 'px';
+          fxGrenade.style.transform = 'translate(-50%, -50%) rotate(720deg) scale(0.8)';
+        }, 350);
+
+        // 到达目标：手雷消失 + 爆炸 + 头像炸飞
+        setTimeout(() => {
+          fxGrenade.style.opacity = '0';
+          fxExplosion.style.left = toX + 'px';
+          fxExplosion.style.top = toY + 'px';
+          fxExplosion.classList.remove('boom');
+          void fxExplosion.offsetWidth;
+          fxExplosion.classList.add('boom');
+
+          // 目标头像被炸飞
+          targetAv.classList.add('blown');
+          setTimeout(() => {
+            targetAv.classList.remove('blown');
+            targetAv.classList.add('comeback');
+            setTimeout(() => targetAv.classList.remove('comeback'), 800);
+          }, 600);
+        }, 700);
+      }, 400);
+    }
+
+    function fxPunchFlurry(casterId) {
+      const targetAv = casterId === myPlayerId ? oppAvatar : myAvatarImg;
+      const r = targetAv.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+
+      const count = 9;
+      for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+          sfxPunch();
+          sfxHitAudio();
+
+          fxPunch.style.left = cx + 'px';
+          fxPunch.style.top = cy + 'px';
+          fxPunch.classList.remove('smash');
+          void fxPunch.offsetWidth;
+          fxPunch.classList.add('smash');
+
+          fxShakeTarget(casterId);
+          if (i === 0 || i === count - 1) fxScreenShake();
+        }, i * 225);
+      }
+    }
+
+    function fxSlapFlurry(casterId) {
+      const targetAv = casterId === myPlayerId ? oppAvatar : myAvatarImg;
+      const r = targetAv.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+
+      const count = 7;
+      for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+          sfxSlap();
+          sfxHitAudio();
+
+          fxSlap.style.left = cx + 'px';
+          fxSlap.style.top = cy + 'px';
+          fxSlap.classList.remove('smash');
+          void fxSlap.offsetWidth;
+          fxSlap.classList.add('smash');
+
+          fxShakeTarget(casterId);
+          if (i === 0 || i === count - 1) fxScreenShake();
+        }, i * 200);
+      }
+    }
+
+    function fxDualGun(casterId) {
+      const casterAv = casterId === myPlayerId ? myAvatarImg : oppAvatar;
+      const targetAv = casterId === myPlayerId ? oppAvatar : myAvatarImg;
+      const cr = casterAv.getBoundingClientRect();
+      const tr = targetAv.getBoundingClientRect();
+      const cx = cr.left + cr.width / 2;
+      const cy = cr.top + cr.height / 2;
+      const tx = tr.left + tr.width / 2;
+      const ty = tr.top + tr.height / 2;
+
+      // 双枪出现在施法者头像两侧
+      fxDualGunL.style.cssText = `left:${cx - 22}px; top:${cy}px; opacity:1; transform:translate(-50%,-50%) rotate(-10deg); transition:none;`;
+      fxDualGunR.style.cssText = `left:${cx + 22}px; top:${cy - 8}px; opacity:1; transform:translate(-50%,-50%) rotate(10deg); transition:none;`;
+
+      const shots = 8;
+      for (let i = 0; i < shots; i++) {
+        setTimeout(() => {
+          const isLeft = i % 2 === 0;
+          const gun = isLeft ? fxDualGunL : fxDualGunR;
+          const gx = cx + (isLeft ? -22 : 22);
+          const gy = cy + (isLeft ? 0 : -8);
+
+          // 后座力
+          gun.classList.remove('recoil');
+          void gun.offsetWidth;
+          gun.classList.add('recoil');
+
+          // 枪声
+          sfxGun();
+
+          // 子弹
+          const bullet = document.createElement('div');
+          bullet.style.cssText = `
+            position:fixed; z-index:310; pointer-events:none;
+            width:8px; height:8px; background:#ffcc00; border-radius:50%;
+            box-shadow:0 0 6px #ff8800, 0 0 12px #ff4400;
+            left:${gx}px; top:${gy}px; opacity:1;
+            transform:translate(-50%,-50%) scale(0.6);
+            transition:none;
+          `;
+          document.body.appendChild(bullet);
+          void bullet.offsetWidth;
+
+          // 子弹飞行
+          bullet.style.transition = 'left 0.25s linear, top 0.25s linear, transform 0.25s linear, opacity 0.25s';
+          bullet.style.left = tx + 'px';
+          bullet.style.top = ty + 'px';
+          bullet.style.transform = 'translate(-50%, -50%) scale(1.2)';
+
+          // 命中
+          const onHit = () => {
+            bullet.removeEventListener('transitionend', onHit);
+            bullet.remove();
+            // 小命中火光
+            const flash = document.createElement('div');
+            flash.style.cssText = `
+              position:fixed; z-index:311; pointer-events:none;
+              width:30px; height:30px; background:radial-gradient(circle,#ffff00,#ff8800 40%,transparent 70%);
+              border-radius:50%; left:${tx}px; top:${ty}px; opacity:1;
+              transform:translate(-50%,-50%) scale(0.5);
+              transition: all 0.2s ease-out;
+            `;
+            document.body.appendChild(flash);
+            void flash.offsetWidth;
+            flash.style.opacity = '0';
+            flash.style.transform = 'translate(-50%, -50%) scale(2)';
+            setTimeout(() => flash.remove(), 200);
+
+            fxShakeTarget(casterId);
+            sfxHitAudio();
+          };
+          bullet.addEventListener('transitionend', onHit);
+        }, 200 + i * 180);
+      }
+
+      // 收枪
+      setTimeout(() => {
+        fxDualGunL.style.opacity = '0';
+        fxDualGunR.style.opacity = '0';
+      }, 200 + shots * 180 + 300);
+    }
+
+    function fxCombo510(casterId) {
+      const casterAv = casterId === myPlayerId ? myAvatarImg : oppAvatar;
+      const targetAv = casterId === myPlayerId ? oppAvatar : myAvatarImg;
+      const cr = casterAv.getBoundingClientRect();
+      const tr = targetAv.getBoundingClientRect();
+      const fromX = cr.left + cr.width / 2;
+      const fromY = cr.top + cr.height / 2;
+      const toX = tr.left + tr.width / 2;
+      const toY = tr.top + tr.height / 2;
+
+      // 1. 花束飞向对面 (0ms)
+      const bouquet = document.createElement('div');
+      bouquet.textContent = '💐';
+      bouquet.style.cssText = `
+        position:fixed; z-index:370; pointer-events:none;
+        font-size:48px; left:${fromX}px; top:${fromY}px; opacity:1;
+        transform:translate(-50%,-50%) scale(0.5); transition:none;
+      `;
+      document.body.appendChild(bouquet);
+      void bouquet.offsetWidth;
+
+      // 欢呼音效
+      sfxCheer();
+
+      // 花束弧线飞行
+      const midX = (fromX + toX) / 2;
+      const midY = Math.min(fromY, toY) - 50;
+      bouquet.style.transition = 'left 0.45s ease-out, top 0.45s ease-out, transform 0.45s ease-out';
+      bouquet.style.left = midX + 'px';
+      bouquet.style.top = midY + 'px';
+      bouquet.style.transform = 'translate(-50%,-50%) scale(1.1) rotate(-15deg)';
+
+      setTimeout(() => {
+        bouquet.style.transition = 'left 0.4s ease-in, top 0.4s ease-in, transform 0.4s ease-in, opacity 0.4s';
+        bouquet.style.left = toX + 'px';
+        bouquet.style.top = toY + 'px';
+        bouquet.style.transform = 'translate(-50%,-50%) scale(0.8) rotate(0deg)';
+        bouquet.style.opacity = '0.6';
+      }, 450);
+
+      // 花到达后消失
+      setTimeout(() => {
+        bouquet.remove();
+      }, 900);
+
+      // 2. 拳头飞向对面 (950ms)
+      setTimeout(() => {
+        const fist = document.createElement('div');
+        fist.textContent = '👊';
+        fist.style.cssText = `
+          position:fixed; z-index:375; pointer-events:none;
+          font-size:64px; left:${fromX}px; top:${fromY}px; opacity:1;
+          transform:translate(-50%,-50%) scale(0.4); transition:none;
+        `;
+        document.body.appendChild(fist);
+        void fist.offsetWidth;
+
+        fist.style.transition = 'left 0.3s ease-in, top 0.3s ease-in, transform 0.3s ease-in';
+        fist.style.left = toX + 'px';
+        fist.style.top = toY + 'px';
+        fist.style.transform = 'translate(-50%,-50%) scale(1.3)';
+
+        // 拳头命中 (950+300=1250ms)
+        const onFistHit = () => {
+          fist.removeEventListener('transitionend', onFistHit);
+          fist.remove();
+
+          sfxPunch();
+          sfxHitAudio();
+          fxShakeTarget(casterId);
+          fxScreenShake();
+
+          // 拳击特效在目标头像处
+          fxPunch.style.left = toX + 'px';
+          fxPunch.style.top = toY + 'px';
+          fxPunch.classList.remove('smash');
+          void fxPunch.offsetWidth;
+          fxPunch.classList.add('smash');
+        };
+        fist.addEventListener('transitionend', onFistHit);
+      }, 950);
+    }
+
+    function fxHeartsExchange() {
+      const myR = myAvatarImg.getBoundingClientRect();
+      const oppR = oppAvatar.getBoundingClientRect();
+      const myX = myR.left + myR.width / 2;
+      const myY = myR.top + myR.height / 2;
+      const oppX = oppR.left + oppR.width / 2;
+      const oppY = oppR.top + oppR.height / 2;
+
+      const hearts = [];
+      const totalHearts = 14;
+      const spawnHeart = (fromX, fromY, toX, toY, delay) => {
+        setTimeout(() => {
+          const heart = document.createElement('div');
+          heart.textContent = ['❤️', '💕', '💖', '💗'][Math.floor(Math.random() * 4)];
+          const size = 16 + Math.random() * 22;
+          const midX = (fromX + toX) / 2 + (Math.random() - 0.5) * 60;
+          const midY = (fromY + toY) / 2 - 40 - Math.random() * 50;
+          const dur = 0.7 + Math.random() * 0.5;
+          heart.style.cssText = `
+            position: fixed; z-index: 355; pointer-events: none;
+            font-size: ${size}px;
+            left: ${fromX}px; top: ${fromY}px;
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.3);
+            transition: none;
+          `;
+          document.body.appendChild(heart);
+          hearts.push(heart);
+          void heart.offsetWidth;
+          // 两段飞行：先到中点，再到目标（形成弧线）
+          heart.style.transition = 'left 0.35s ease-out, top 0.35s ease-out, transform 0.35s ease-out, opacity 0.35s';
+          heart.style.left = midX + 'px';
+          heart.style.top = midY + 'px';
+          heart.style.opacity = '1';
+          heart.style.transform = 'translate(-50%, -50%) scale(1)';
+          setTimeout(() => {
+            heart.style.transition = 'left 0.35s ease-in, top 0.35s ease-in, transform 0.35s ease-in, opacity 0.35s';
+            heart.style.left = toX + 'px';
+            heart.style.top = toY + 'px';
+            heart.style.transform = 'translate(-50%, -50%) scale(0.6)';
+            heart.style.opacity = '0.5';
+          }, 350);
+        }, delay);
+      };
+
+      // 双方各发射7颗心，交替
+      for (let i = 0; i < totalHearts; i++) {
+        spawnHeart(myX, myY, oppX, oppY, i * 110);
+        spawnHeart(oppX, oppY, myX, myY, i * 110 + 55);
+      }
+
+      setTimeout(() => hearts.forEach(h => h.remove()), 2500);
+    }
+
+    // ---- 效果映射表 ----
+    const SKILL_EFFECTS = {
+      'single_4': { sound: 'slash', visuals: ['hit'], dur: 3000 },
+      'single_5': { sound: 'shield', visuals: ['shieldUp'], dur: 2000 },
+      'single_6': { sound: 'healAudio', visuals: ['waterDrop', 'healGlow'], dur: 1500 },
+      'single_8': { sound: null, visuals: ['gun'], dur: 1500 },
+      'single_0': { sound: ['punch', 'hitAudio'], visuals: ['punch', 'screenShake'], dur: 800 },
+      'combo_22': { sound: 'powerUp', visuals: ['intelLaser'], dur: 2500 },
+      'combo_19': { sound: ['hougongshu'], visuals: ['hit_both', 'screenShake', 'heartsRain'], dur: 2500 },
+      'combo_69': { sound: ['seyoushu'], visuals: ['healGlow_both', 'heartsExchange'], dur: 2200 },
+      'combo_61': { sound: ['bow'], visuals: ['arrow1'], dur: 1800 },
+      'combo_62': { sound: ['bow'], visuals: ['arrow2'], dur: 2000 },
+      'combo_63': { sound: ['bow'], visuals: ['arrow3'], dur: 2200 },
+      'combo_910': { sound: ['cfshoulei'], visuals: ['throwGrenade', 'screenShake', 'hit_both'], dur: 2800 },
+      'combo_15': { sound: 'seal', visuals: ['shieldUp', 'sealLock'], dur: 2500 },
+      'combo_58': { sound: 'peace', visuals: ['peaceGlow'], dur: 2000 },
+      'combo_510': { sound: null, visuals: ['shieldUp', 'combo510'], dur: 1800 },
+      'combo_55': { sound: null, visuals: ['shieldUp', 'slapFlurry', 'bigText_降龙十八掌'], dur: 2000 },
+      'combo_1010': { sound: ['oula'], visuals: ['punchFlurry', 'bigText_白金连打'], dur: 2500 },
+      'combo_77': { sound: ['sageMode', 'healAudio'], visuals: ['sageAura', 'narutoFlash', 'healGlow'], dur: 3000 },
+      'combo_88': { sound: null, visuals: ['dualGun'], dur: 2200 },
+      'nine_revive': { sound: 'wineAudio', visuals: ['reviveGlow', 'bigText_喝酒复活'], dur: 1500 },
+      'combo_19_self': { sound: ['hougongshu'], visuals: ['hit'], dur: 800 },
+    };
+
+    // ---- 主调度 ----
+    function playSkillEffect(skillId, casterId, targetHand) {
+      const cfg = SKILL_EFFECTS[skillId];
+      if (!cfg) return;
+
+      // 动画期间锁定操作（按动画实际时长）
+      animLocked = true;
+      clearTimeout(animLocked._timer);
+      animLocked._timer = setTimeout(() => { animLocked = false; }, cfg.dur || 2000);
+
+      // 目标手特效（双方可见，combo_15 走 SKILL_CAST 通道）
+      if (targetHand && skillId === 'combo_15') {
+        setTimeout(() => sfxSealSelect(), 400);
+        // 攻击方看对面手（视觉翻转），被攻击方看自己手（不翻转）
+        const iAmCaster = casterId === myPlayerId;
+        let handEl;
+        if (iAmCaster) {
+          // 对面的实际左手在我右边，实际右手在我左边
+          handEl = (targetHand === 'left') ? oppRight : oppLeft;
+        } else {
+          // 我被封印，看自己的手
+          handEl = (targetHand === 'left') ? myLeft : myRight;
+        }
+        setTimeout(() => fxClockOnHand(handEl), 440);
+      }
+
+      // 音效
+      const soundMap = { slash: sfxSlash, shield: sfxShield, heal: sfxHeal, gun: sfxGun,
+        punch: sfxPunch, hit: sfxHit, explosion: sfxExplosion, bow: sfxBow,
+        seal: sfxSeal, peace: sfxPeace, powerUp: sfxPowerUp, revive: sfxRevive,
+        sageMode: sfxSageMode, kingCrimson: sfxKingCrimson, waterDrink: sfxWaterDrink, healAudio: sfxHealAudio, hitAudio: sfxHitAudio, wineAudio: sfxWineAudio, seyoushu: sfxSeyoushu, hougongshu: sfxHougongshu, cfshoulei: sfxCfshoulei, oula: sfxOula };
+      // 支持单个音效或音效数组
+      if (cfg.sound) {
+        const sounds = Array.isArray(cfg.sound) ? cfg.sound : [cfg.sound];
+        sounds.forEach(s => { if (soundMap[s]) soundMap[s](); });
+      }
+
+      // 视觉
+      (cfg.visuals || []).forEach(v => {
+        switch (v) {
+          case 'hit': fxShakeTarget(casterId); break;
+          case 'hit_both':
+            fxShakeTarget(casterId);
+            fxShakeSelf(casterId);
+            break;
+          case 'slashEffect': fxSlashEffect(); break;
+          case 'shieldUp': fxShieldUp(casterId); break;
+          case 'healGlow': fxHealGlow(casterId); break;
+          case 'healGlow_both':
+            fxHealGlow(casterId);
+            fxHealGlowTarget(casterId);
+            break;
+          case 'sageAura': fxSageAura(casterId); break;
+          case 'reviveGlow': fxReviveGlow(casterId); break;
+          case 'sealLock': fxSealLock(casterId); break;
+          case 'screenWhite': fxScreenWhite(); break;
+          case 'screenShake': fxScreenShake(); break;
+          case 'peaceGlow': fxPeaceGlow(); break;
+          case 'arrow1': fxBowVolley(casterId, 1); break;
+          case 'arrow2': fxBowVolley(casterId, 2); break;
+          case 'arrow3': fxBowVolley(casterId, 3); break;
+          case 'intelLaser': fxIntelLaser(casterId); break;
+          case 'narutoFlash': fxNarutoFlash(casterId); break;
+          case 'bigText_喝酒复活': fxBigTextShow('🍶 喝酒·复活！', '#ffd700'); break;
+          case 'bigText_降龙十八掌': fxBigTextShow('🐉 降龙十八掌', '#ffd700'); break;
+          case 'bigText_降龙十八拳': fxBigTextShow('🐉 降龙十八拳', '#ff4500'); break;
+          case 'bigText_白金连打': fxBigTextShow('⭐ 白金连打！', '#ffd700'); break;
+          case 'waterDrop': fxWaterDropAnim(casterId); break;
+          case 'kingCrimson': fxKingCrimsonEffect(); break;
+          case 'gun': playGunEffect(casterId); break;
+          case 'dualGun': fxDualGun(casterId); break;
+          case 'punchFlurry': fxPunchFlurry(casterId); break;
+          case 'slapFlurry': fxSlapFlurry(casterId); break;
+          case 'combo510': fxCombo510(casterId); break;
+          case 'punch': fxPunchTarget(casterId); break;
+          case 'heartsRain': fxHeartsRain(); break;
+          case 'heartsExchange': fxHeartsExchange(); break;
+          case 'throwGrenade': fxThrowGrenade(casterId); break;
+        }
+      });
+    }
+
+    function playGunEffect(casterId) {
+      const casterAv = casterId === myPlayerId ? myAvatarImg : oppAvatar;
+      const targetAv = casterId === myPlayerId ? oppAvatar : myAvatarImg;
+      const crosshair = casterId === myPlayerId ? oppCrosshair : myCrosshair;
+      const cr = casterAv.getBoundingClientRect();
+      const tr = targetAv.getBoundingClientRect();
+
+      const fromX = cr.left + cr.width / 2;
+      const fromY = cr.top + cr.height / 2;
+      const toX = tr.left + tr.width / 2;
+      const toY = tr.top + tr.height / 2;
+
+      // 1. 枪出现在施法者头像处
+      gunEffect.style.opacity = '';
+      gunEffect.style.left = fromX + 'px';
+      gunEffect.style.top = fromY + 'px';
+      gunEffect.classList.remove('show', 'kick');
+      void gunEffect.offsetWidth;
+      gunEffect.classList.add('show');
+
+      // 2. 瞄准：准星出现在目标头像 (400ms)
+      setTimeout(() => {
+        crosshair.classList.add('active');
+      }, 400);
+
+      // 3. 发射子弹 (700ms)
+      setTimeout(() => {
+        // 开枪音效
+        sfxGun();
+
+        // 子弹从枪口出发
+        bulletFx.style.left = fromX + 'px';
+        bulletFx.style.top = fromY + 'px';
+        bulletFx.style.opacity = '1';
+        bulletFx.style.transition = 'none';
+        bulletFx.style.transform = 'translate(-50%, -50%) scale(0.6)';
+        void bulletFx.offsetWidth;
+
+        // 子弹飞向目标
+        bulletFx.style.transition = 'left 0.25s linear, top 0.25s linear, transform 0.25s linear';
+        bulletFx.style.left = toX + 'px';
+        bulletFx.style.top = toY + 'px';
+        bulletFx.style.transform = 'translate(-50%, -50%) scale(1.2)';
+
+        // 后座力
+        gunEffect.classList.add('kick');
+        crosshair.classList.remove('active');
+
+        // 子弹命中 (250ms飞行)
+        const onBulletHit = () => {
+          bulletFx.removeEventListener('transitionend', onBulletHit);
+          bulletFx.style.opacity = '0';
+          bulletFx.style.transition = 'none';
+
+          // 命中火光
+          muzzleFlash.style.left = toX + 'px';
+          muzzleFlash.style.top = toY + 'px';
+          muzzleFlash.classList.remove('fire');
+          void muzzleFlash.offsetWidth;
+          muzzleFlash.classList.add('fire');
+
+          // 目标头像变黑
+          targetAv.classList.add('charred');
+
+          // 受击音效 + 震动
+          sfxHitAudio();
+          fxShakeTarget(casterId);
+
+          // 头像恢复
+          setTimeout(() => {
+            targetAv.classList.remove('charred');
+            targetAv.classList.add('recover');
+            setTimeout(() => targetAv.classList.remove('recover'), 1500);
+          }, 800);
+
+          // 清理枪
+          setTimeout(() => {
+            gunEffect.classList.remove('show', 'kick');
+            gunEffect.style.opacity = '0';
+          }, 300);
+        };
+        bulletFx.addEventListener('transitionend', onBulletHit);
+      }, 700);
+    }
+
+    function showSkillCast(message, casterId) {
+      skillCastNotice.textContent = message;
+      const avatar = casterId === myPlayerId ? myAvatarImg : oppAvatar;
+      const rect = avatar.getBoundingClientRect();
+      skillCastNotice.style.top = (rect.top + rect.height / 2) + 'px';
+      skillCastNotice.style.left = (rect.left - 14) + 'px';
+      skillCastNotice.classList.remove('hidden');
+      clearTimeout(skillCastNotice._timer);
+      skillCastNotice._timer = setTimeout(() => {
+        skillCastNotice.classList.add('hidden');
+      }, 1800);
+    }
+
+    function showActionNotice(message) {
+      actionNotice.textContent = message;
+      actionNotice.classList.remove('hidden', 'show');
+      void actionNotice.offsetWidth;
+      actionNotice.classList.add('show');
+      clearTimeout(actionNotice._timer);
+      actionNotice._timer = setTimeout(() => {
+        actionNotice.classList.add('hidden');
+      }, 2500);
+    }
+
+    skipSkillBtn.addEventListener('click', () => {
+      if (animLocked) return;
+      ws.send(JSON.stringify({ type: 'SKILL_CHOICE', skillId: 'none' }));
+      skillModal.classList.add('hidden');
+      exitSkillTargetMode();
+    });
+
+    cancelSkillTargetBtn.addEventListener('click', () => {
+      if (animLocked) return;
+      exitSkillTargetMode();
+      if (pendingSkillOptions && pendingSkillOptions.length) {
+        showSkillPanel(pendingSkillOptions);
+      }
+    });
+
+
+    readyBtn.addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'READY', avatar: myAvatar, nickname: myNickname }));
+      readyBtn.classList.add('hidden');
+      profileSetup.classList.add('hidden');
+      statusMsg.textContent = '等待对方准备...';
+    });
+
+    // -------- 上帝调试面板 --------
+    function debugSetHand(hand) {
+      if (animLocked) return;
+      const input = document.getElementById(hand === 'left' ? 'debugLeftVal' : 'debugRightVal');
+      const val = parseInt(input.value, 10);
+      if (isNaN(val) || val < 0 || val > 9) { alert('数值 0-9'); return; }
+      if (!ws || ws.readyState !== 1) { alert('未连接'); return; }
+      ws.send(JSON.stringify({ type: 'DEBUG_SET_HAND', hand, value: val }));
+    }
+    document.getElementById('debugSetLeft').addEventListener('click', () => debugSetHand('left'));
+    document.getElementById('debugSetRight').addEventListener('click', () => debugSetHand('right'));
+  </script>
+</body>
+</html>
