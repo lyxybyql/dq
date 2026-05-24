@@ -1508,6 +1508,8 @@
 
     // 退出房间
     leaveBtn.addEventListener('click', () => {
+      reconnectRoom = ''; // 手动离开，取消自动重连
+      clearTimeout(reconnectTimer);
       if (dataChannel) { dataChannel.close(); dataChannel = null; }
       if (peerConnection) { peerConnection.close(); peerConnection = null; }
       p2pReady = false;
@@ -1578,10 +1580,17 @@
       connect(document.getElementById('roomInput').value.trim());
     });
 
+    let reconnectTimer = null;
+    let reconnectAttempts = 0;
+    let reconnectRoom = '';
+    const MAX_RECONNECT = 10;
+
     function connect(room) {
+      reconnectRoom = room;
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
       ws = new WebSocket(`${protocol}://${window.location.host}?room=${room}`);
       ws.onopen = () => {
+        reconnectAttempts = 0;
         loginArea.classList.add('hidden');
         gameArea.classList.remove('hidden');
         profileSetup.classList.remove('hidden');
@@ -1626,10 +1635,19 @@
         handleMessage(data);
       };
       ws.onclose = () => {
-        statusMsg.textContent = '连接断开，请刷新页面';
         if (dataChannel) { dataChannel.close(); dataChannel = null; }
         if (peerConnection) { peerConnection.close(); peerConnection = null; }
         p2pReady = false;
+
+        // 断线自动重连
+        if (reconnectAttempts < MAX_RECONNECT && reconnectRoom) {
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 15000);
+          reconnectAttempts++;
+          statusMsg.textContent = `连接断开，${Math.round(delay/1000)}秒后重连 (${reconnectAttempts}/${MAX_RECONNECT})...`;
+          reconnectTimer = setTimeout(() => connect(reconnectRoom), delay);
+        } else {
+          statusMsg.textContent = '连接断开，请刷新页面重试';
+        }
       };
     }
 
