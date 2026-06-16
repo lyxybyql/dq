@@ -63,7 +63,21 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 
+// 心跳保活：每 30 秒 ping 所有客户端，防止路由器/NAT 断连
+const heartbeatInterval = setInterval(() => {
+  wss.clients.forEach(ws => {
+    if (ws.isAlive === false) {
+      ws.terminate();
+      return;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
+
 wss.on('connection', (ws, req) => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
   const parameters = url.parse(req.url, true).query;
   const roomId = parameters.room;
   const playerId = generateId();

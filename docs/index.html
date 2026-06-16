@@ -923,6 +923,80 @@
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.1); }
     }
+
+    /* ========== 招式说明面板 (按住Tab显示) ========== */
+    #skillRefOverlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 450;
+      background: rgba(0, 0, 0, 0.88);
+      display: flex; align-items: center; justify-content: center;
+      animation: refFadeIn 0.12s ease-out;
+    }
+    @keyframes refFadeIn {
+      0% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+    #skillRefOverlay.hidden { display: none; }
+    .skill-ref-panel {
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      border: 2px solid rgba(255, 215, 0, 0.35);
+      border-radius: 16px;
+      padding: 24px 28px;
+      max-width: 720px;
+      width: 95%;
+      max-height: 85vh;
+      overflow-y: auto;
+      color: #ddd;
+      box-shadow: 0 0 50px rgba(0, 0, 0, 0.7);
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,215,0,0.25) transparent;
+    }
+    .skill-ref-panel::-webkit-scrollbar { width: 5px; }
+    .skill-ref-panel::-webkit-scrollbar-thumb { background: rgba(255,215,0,0.25); border-radius: 3px; }
+    .skill-ref-panel h2 {
+      text-align: center; color: #ffd700; font-size: 24px;
+      margin-bottom: 16px; padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255,215,0,0.25);
+    }
+    .skill-ref-panel h3 {
+      color: #ff8c00; font-size: 18px; margin: 18px 0 10px;
+      border-left: 3px solid #ff8c00; padding-left: 10px;
+    }
+    .skill-ref-table {
+      width: 100%; border-collapse: collapse; font-size: 14px;
+    }
+    .skill-ref-table th {
+      background: rgba(255,215,0,0.08);
+      padding: 8px 12px; text-align: left; color: #ffd700;
+      font-size: 13px; font-weight: 600;
+    }
+    .skill-ref-table td {
+      padding: 7px 12px; border-bottom: 1px solid rgba(255,255,255,0.05);
+      vertical-align: top;
+    }
+    .skill-ref-table tr:hover td { background: rgba(255,255,255,0.03); }
+    .skill-ref-table .gesture {
+      font-weight: 700; color: #ffd700; white-space: nowrap;
+      font-size: 15px; font-family: 'Consolas', 'Courier New', monospace;
+    }
+    .skill-ref-table .name {
+      font-weight: 600; color: #fff; white-space: nowrap;
+    }
+    .skill-ref-table .effect {
+      color: #aaa; font-size: 13px; line-height: 1.5;
+    }
+    .skill-ref-hint {
+      text-align: center; color: #777; font-size: 13px; margin-top: 18px;
+    }
+    .skill-ref-hint kbd {
+      background: #333; border: 1px solid #555; border-radius: 4px;
+      padding: 2px 8px; font-size: 12px; color: #ccc; margin: 0 2px;
+    }
+    .skill-ref-panel .ref-note {
+      margin-top: 14px; padding: 10px 14px; background: rgba(255,255,255,0.03);
+      border-radius: 8px; font-size: 13px; color: #999; line-height: 1.7;
+    }
+    .skill-ref-panel .ref-note span { color: #ffd700; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -1071,6 +1145,56 @@
         <button id="skipSkill">跳过（不发动）</button>
       </div>
     </div>
+
+    <!-- 招式说明面板（按住Tab显示） -->
+    <div id="skillRefOverlay" class="hidden">
+      <div class="skill-ref-panel">
+        <h2>📖 招式说明</h2>
+
+        <h3>🔢 单手技能</h3>
+        <table class="skill-ref-table">
+          <thead><tr><th>手势</th><th>招式名</th><th>效果</th></tr></thead>
+          <tbody>
+            <tr><td class="gesture">0</td><td class="name">打拳</td><td class="effect">对对手造成 1 点伤害</td></tr>
+            <tr><td class="gesture">4</td><td class="name">挥砍</td><td class="effect">砍掉对手一只手 3 回合。若对手双手被砍，先被砍的手直接恢复为 1 并扣 1 HP</td></tr>
+            <tr><td class="gesture">5</td><td class="name">护盾</td><td class="effect">获得 2 点护盾，持续 2 回合（护盾可吸收普通伤害）</td></tr>
+            <tr><td class="gesture">6</td><td class="name">饮甘露</td><td class="effect">回复 1 点 HP（上限 10）</td></tr>
+            <tr><td class="gesture">8</td><td class="name">打手枪</td><td class="effect">对对手造成 1 点伤害</td></tr>
+          </tbody>
+        </table>
+
+        <h3>🤝 组合技</h3>
+        <table class="skill-ref-table">
+          <thead><tr><th>手势组合</th><th>招式名</th><th>效果</th></tr></thead>
+          <tbody>
+            <tr><td class="gesture">1 + 9</td><td class="name">海角之乐</td><td class="effect">双方各受 1 伤；HP 较低方获得额外回合</td></tr>
+            <tr><td class="gesture">6 + 9</td><td class="name">云雨之乐</td><td class="effect">双方各回复 1 HP；HP 较高方获得额外回合</td></tr>
+            <tr><td class="gesture">2 + 2</td><td class="name">加智力</td><td class="effect">随机获得减 / 乘 / 除运算之一</td></tr>
+            <tr><td class="gesture">1 + 6</td><td class="name">射箭</td><td class="effect">对对手造成 1 点伤害</td></tr>
+            <tr><td class="gesture">2 + 6</td><td class="name">二重连矢</td><td class="effect">破除对手 1 点护盾并造成 1 伤；无盾则直接造成 1 伤</td></tr>
+            <tr><td class="gesture">3 + 6</td><td class="name">三连破矢</td><td class="effect">无视护盾，直接造成 1 点伤害</td></tr>
+            <tr><td class="gesture">0 + 9</td><td class="name">自爆手雷</td><td class="effect">自伤 2 点，对对手造成 4 点伤害（代价技能，不会自动发动）</td></tr>
+            <tr><td class="gesture">1 + 5</td><td class="name">封印</td><td class="effect">获得 2 护盾，封印对手一只手 2 回合</td></tr>
+            <tr><td class="gesture">5 + 8</td><td class="name">五八同城</td><td class="effect">6 回合和平模式，双方不受伤害</td></tr>
+            <tr><td class="gesture">0 + 5</td><td class="name">恭敬拳</td><td class="effect">获得 2 护盾，对对手造成 1 点真实伤害（无视护盾）</td></tr>
+            <tr><td class="gesture">5 + 5</td><td class="name">降龙十八掌</td><td class="effect">获得 2 护盾，对对手造成 1 点伤害</td></tr>
+            <tr><td class="gesture">0 + 0</td><td class="name">白金连打</td><td class="effect">对对手造成 2 点真实伤害（无视护盾）</td></tr>
+            <tr><td class="gesture">7 + 7</td><td class="name">仙人模式</td><td class="effect">回复 2 HP，接下来 3 回合额外造成 1 点真实伤害</td></tr>
+            <tr><td class="gesture">8 + 8</td><td class="name">双枪打击</td><td class="effect">对对手造成 2 点伤害</td></tr>
+          </tbody>
+        </table>
+
+        <div class="ref-note">
+          💡 <span>运算规则：</span>加减乘除结果模 10 存入攻击手，除法取第一个非零位<br>
+          🍶 <span>喝酒复活：</span>手值为 9 的玩家死亡时自动复活一次（HP 恢复为 1）<br>
+          🔄 <span>砍手恢复：</span>被砍的手 3 回合后自动恢复为 1；也可在第 2 回合点击血红手牌支付 1 HP 提前恢复<br>
+          ⚡ <span>强制连招：</span>1+9、6+9、5+8 运算后自动触发，不可跳过<br>
+          🎯 <span>自动发动：</span>仅剩一个纯正面技能时自动触发，无需手动选择
+        </div>
+
+        <div class="skill-ref-hint">松开 <kbd>Tab</kbd> 关闭招式表</div>
+      </div>
+    </div>
   </div>
 
   <div id="skillCastNotice" class="cast-notice hidden"></div>
@@ -1154,7 +1278,10 @@
   <script>
     // ==================== 静态资源 CDN ====================
     // 把 public 文件夹上传到 GitHub Pages / OSS 后，把下面的地址改成 CDN 地址
-    const ASSET_BASE = 'https://lyxybyql.github.io/dq/';
+    // 只有部署在 GitHub Pages 时走 CDN，其他情况（本地/直连服务器）从服务器加载
+    const ASSET_BASE = window.location.hostname.includes('github.io')
+      ? 'https://lyxybyql.github.io/dq/'
+      : '';
     function asset(path) { return ASSET_BASE + path; }
 
     // ==================== 资源加载进度 ====================
@@ -1215,7 +1342,8 @@
       'touxiang/touxiang3.jpg',
       'touxiang/touxiang4.jpg',
       'touxiang/touxiang5.jpg',
-      'touxiang/touxiang6.jpg'
+      'touxiang/touxiang6.jpg',
+      'touxiang/touxiang7.jpg'
     ];
     let myAvatar = AVATARS[0];
     let myNickname = '';
@@ -3555,6 +3683,35 @@
     }
     document.getElementById('debugSetLeft').addEventListener('click', () => debugSetHand('left'));
     document.getElementById('debugSetRight').addEventListener('click', () => debugSetHand('right'));
+
+    // -------- 招式说明：按住 Tab 显示，松开消失 --------
+    let skillRefVisible = false;
+    const skillRefOverlay = document.getElementById('skillRefOverlay');
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab' && gameStarted && currentState && currentState.phase === 'playing') {
+        e.preventDefault();
+        if (!skillRefVisible) {
+          skillRefVisible = true;
+          skillRefOverlay.classList.remove('hidden');
+        }
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 'Tab' && skillRefVisible) {
+        skillRefVisible = false;
+        skillRefOverlay.classList.add('hidden');
+      }
+    });
+
+    // 防止切换标签页后 Tab 状态卡住：页面失去焦点时自动关闭
+    window.addEventListener('blur', () => {
+      if (skillRefVisible) {
+        skillRefVisible = false;
+        skillRefOverlay.classList.add('hidden');
+      }
+    });
   </script>
 </body>
 </html>
